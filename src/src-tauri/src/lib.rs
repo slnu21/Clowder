@@ -1,4 +1,5 @@
 pub mod conpty_check;
+pub mod fs_ops;
 pub mod pty;
 pub mod selftest;
 
@@ -34,6 +35,9 @@ pub fn run() {
             pty::pty_write,
             pty::pty_resize,
             pty::pty_close,
+            fs_ops::list_drives,
+            fs_ops::list_dir,
+            fs_ops::default_root,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

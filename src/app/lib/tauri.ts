@@ -7,8 +7,25 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 
 export type PtyChunk = { data: string };
 
+export type Entry = {
+  name: string;
+  path: string;
+  isDir: boolean;
+  /** Hidden by attribute or leading dot — dimmed, not hidden. */
+  hidden: boolean;
+};
+
 /** Path to the shell we spawn by default (Git Bash if installed, else PowerShell). */
 export const defaultShell = () => invoke<string>("default_shell");
+
+/** Tree roots. Drives only — deck has no workspace to be scoped to. */
+export const listDrives = () => invoke<Entry[]>("list_drives");
+
+/** One level, lazily. Never recursive: a recursive listing of `C:\` would hang the app. */
+export const listDir = (path: string) => invoke<Entry[]>("list_dir", { path });
+
+/** Convenience starting point, not a workspace. */
+export const defaultRoot = () => invoke<string | null>("default_root");
 
 /**
  * Start a shell and stream its output.
