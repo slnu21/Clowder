@@ -74,3 +74,14 @@ body {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   opacity: 0.35;
 }
+
+/* xterm measures its host, so the host must have a real size before fit() runs. */
+.terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 0 0 6px;
+}
+
+.terminal .xterm {
+  height: 100%;
+}

@@ -1,10 +1,9 @@
+import Terminal from "./features/terminal/Terminal";
+
 /**
- * M1 shell: the three regions, laid out and nothing more.
- *
- * Left = full filesystem explorer (M3), centre = tiles + tabs (M2/M4), right = session tree (M5).
- * The grid here is a placeholder — M4 replaces it with Allotment so the splits become draggable.
- * Kept as static divs on purpose: the point of M1 is that the window opens and the layout reads
- * correctly, not that anything works.
+ * The three regions. Left = full filesystem explorer (M3), centre = terminal, right = session tree
+ * (M5). The centre holds exactly one terminal for now; M4 turns the grid into Allotment splits and
+ * lets a tab hold a tree of panes.
  */
 export default function App() {
   return (
@@ -15,8 +14,7 @@ export default function App() {
       </aside>
 
       <main className="pane workspace">
-        <div className="pane-title">터미널</div>
-        <div className="placeholder">M2 · M4</div>
+        <Terminal />
       </main>
 
       <aside className="pane sessions">

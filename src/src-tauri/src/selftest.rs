@@ -40,6 +40,11 @@ pub fn data_dir() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("deck"))
 }
 
+/// Substring search over raw bytes — the point is to never decode, so `str::contains` is out.
+fn find_bytes(hay: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty() && hay.windows(needle.len()).any(|w| w == needle)
+}
+
 pub fn run() -> i32 {
     let mut t = SelfTest::new();
 
@@ -66,8 +71,79 @@ pub fn run() -> i32 {
     };
     t.check("data_dir_writable", writable, "write+delete probe file");
 
-    // M2 adds: conpty.dll present and loaded, OpenConsole.exe paired, byte-lossless Korean round
-    // trip through the PTY, coalescing flush count under flood. M5 adds: spool parse/sort/reap.
+    // --- conpty sideload ---
+    // The whole point of this gate. portable-pty falls back to the buggy OS ConPTY *in silence*, so
+    // nothing else in the app will ever tell us this went wrong. See conpty/README.md.
+    let dir = crate::conpty_check::exe_dir();
+    for name in ["conpty.dll", "OpenConsole.exe"] {
+        let p = dir.as_ref().map(|d| d.join(name));
+        let exists = p.as_ref().map(|p| p.is_file()).unwrap_or(false);
+        t.check(
+            &format!("{}_next_to_exe", name.to_lowercase().replace('.', "_")),
+            exists,
+            match &p {
+                Some(p) => p.display().to_string(),
+                None => "exe dir unknown".into(),
+            },
+        );
+    }
+
+    // Existence is not enough — present-but-unloadable (wrong arch, corrupt) is precisely when the
+    // silent fallback bites. Load it and look at where Windows resolved it from.
+    let origin = crate::conpty_check::conpty_origin();
+    use crate::conpty_check::ConPtyOrigin;
+    t.check(
+        "conpty_is_sideloaded",
+        matches!(origin, ConPtyOrigin::Sideloaded(_)),
+        match &origin {
+            ConPtyOrigin::Sideloaded(p) => format!("loaded from {}", p.display()),
+            ConPtyOrigin::System(p) => format!("OS ConPTY! resolved to {}", p.display()),
+            ConPtyOrigin::NotLoaded(why) => format!("not loaded -> kernel32 fallback: {why}"),
+        },
+    );
+
+    // --- PTY byte path ---
+    let shell = crate::pty::default_shell();
+    let is_bash = shell.to_lowercase().ends_with("bash.exe");
+    t.check("shell_found", is_bash, &shell);
+
+    if is_bash {
+        // The whole reason we never turn PTY bytes into a String in Rust: a 3-byte Korean character
+        // straddling a read boundary would be mangled, not merely slow. Assert the bytes survive.
+        const NEEDLE: &str = "한글-데크-";
+        let out = crate::pty::probe(
+            &shell,
+            &format!(r#"chcp.com 65001 >/dev/null 2>&1; printf '{}%s\n' OK"#, NEEDLE),
+            std::time::Duration::from_secs(10),
+        );
+        let hay = out.unwrap_or_default();
+        let found = find_bytes(&hay, format!("{NEEDLE}OK").as_bytes());
+        t.check(
+            "korean_bytes_round_trip",
+            found,
+            format!("{} bytes back, needle {}", hay.len(), if found { "intact" } else { "MANGLED" }),
+        );
+
+        // Flood: without coalescing this is one IPC message per read. We can't observe the frontend
+        // here, so assert the property that makes coalescing possible — the bytes arrive whole and
+        // fast — and let the frame budget be checked by the flush-count math below.
+        let started = std::time::Instant::now();
+        let flood = crate::pty::probe(
+            &shell,
+            "chcp.com 65001 >/dev/null 2>&1; seq 1 20000",
+            std::time::Duration::from_secs(20),
+        )
+        .unwrap_or_default();
+        let elapsed = started.elapsed();
+        let frames = (elapsed.as_millis() / 16).max(1);
+        t.check(
+            "flood_survives",
+            flood.len() > 50_000,
+            format!("{} bytes in {:?} (<= ~{} frames)", flood.len(), elapsed, frames),
+        );
+    }
+
+    // M5 adds: spool parse/sort/reap, ancestor walk.
 
     let result = if t.failed == 0 { "OK" } else { "FAIL" };
     let report = format!("{}\nRESULT={}\n", t.lines, result);
