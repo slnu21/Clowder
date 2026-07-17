@@ -1,0 +1,27 @@
+# === 하네스 로컬 컨텍스트 ===
+.claude/
+CLAUDE.md
+docs/
+.worktrees/
+.atlas/
+
+# === node / vite ===
+node_modules/
+dist/
+.vite/
+
+# === rust / tauri ===
+src/src-tauri/target/
+src/src-tauri/gen/
+
+# === 배포 ===
+*.msix
+*.zip
+release/
+
+# === IDE / OS ===
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
