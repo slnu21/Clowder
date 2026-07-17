@@ -33,7 +33,18 @@ export default function Terminal({ cwd }: { cwd?: string }) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
-    fit.fit();
+
+    // Only fit once the host actually has a size. In dev, Vite injects CSS from JS, so this effect
+    // can run before `.terminal { flex: 1 }` applies — fit() would then measure a zero-height box
+    // and settle on ~0 rows. The observer covers both the arrival of the stylesheet and every later
+    // resize. (This is a guard, not the fix for the cold-start blank — that was a PTY flush race in
+    // pty.rs where the shell's opening prompt never left the coalescing buffer.)
+    const refit = () => {
+      if (host.clientHeight > 0 && host.clientWidth > 0) fit.fit();
+    };
+    refit();
+    const ro = new ResizeObserver(refit);
+    ro.observe(host);
 
     (async () => {
       const shell = await defaultShell();
@@ -52,9 +63,6 @@ export default function Terminal({ cwd }: { cwd?: string }) {
       term.onData((d) => void ptyWrite(id, d));
       term.onResize(({ cols, rows }) => void ptyResize(id, cols, rows));
     })();
-
-    const ro = new ResizeObserver(() => fit.fit());
-    ro.observe(host);
 
     return () => {
       disposed = true;

@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
@@ -86,42 +87,68 @@ pub fn pty_spawn(
         .spawn_command(build_command(&shell, cwd.as_deref()))
         .map_err(|e| format!("spawn {shell}: {e}"))?;
 
-    let mut reader = pair.master.try_clone_reader().map_err(|e| format!("reader: {e}"))?;
+    let reader = pair.master.try_clone_reader().map_err(|e| format!("reader: {e}"))?;
     let writer = pair.master.take_writer().map_err(|e| format!("writer: {e}"))?;
 
     let id = state.next_id.fetch_add(1, Ordering::Relaxed);
     state.panes.lock().unwrap().insert(id, Pane { pair, writer, child });
 
-    std::thread::spawn(move || read_loop(&mut reader, on_data));
+    std::thread::spawn(move || read_loop(reader, on_data));
 
     Ok(id)
 }
 
-/// Read until EOF, emitting at most one message per frame.
+/// Drain the PTY to the frontend, coalescing at most one message per 16 ms frame.
 ///
-/// The blocking read is what paces us: it returns as soon as any bytes are available, so under a
-/// trickle we forward immediately (no added latency) and under a flood we coalesce (no meltdown).
-fn read_loop(reader: &mut (dyn Read + Send), channel: Channel<PtyChunk>) {
-    let mut buf = [0u8; 64 * 1024];
-    let mut pending: Vec<u8> = Vec::new();
-    let mut last = Instant::now();
-
-    loop {
-        match reader.read(&mut buf) {
-            Ok(0) => break, // EOF — child exited
-            Ok(n) => {
-                pending.extend_from_slice(&buf[..n]);
-                if last.elapsed() >= FRAME || pending.len() >= MAX_FRAME_BYTES {
-                    if flush(&channel, &mut pending).is_err() {
-                        break; // frontend dropped the channel (pane closed)
+/// A blocking `read` returns up to 64 KiB at once, so it already batches a burst — but on a **quiet**
+/// terminal it blocks indefinitely, which used to strand the shell's opening prompt in the buffer
+/// until the user pressed a key (the prompt arrived in the first read, the frame timer hadn't elapsed
+/// yet, and the next read blocked forever waiting for bytes that never came). So reading runs on its
+/// own thread and this forwarder times the frame independently of when the next byte arrives: it
+/// blocks for the first byte (zero CPU while idle), then coalesces for one frame and flushes. The
+/// prompt now shows within 16 ms of arriving, floods still collapse into ≤60 messages/sec.
+fn read_loop(mut reader: Box<dyn Read + Send>, channel: Channel<PtyChunk>) {
+    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 64 * 1024];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) | Err(_) => break, // EOF or error — dropping tx tells the forwarder to stop
+                Ok(n) => {
+                    if tx.send(buf[..n].to_vec()).is_err() {
+                        break; // forwarder gone (pane closed)
                     }
-                    last = Instant::now();
                 }
             }
-            Err(_) => break,
+        }
+    });
+
+    let mut pending: Vec<u8> = Vec::new();
+    loop {
+        // Block until there's something to send — the first byte starts the frame.
+        match rx.recv() {
+            Ok(chunk) => pending.extend_from_slice(&chunk),
+            Err(_) => break, // reader thread ended
+        }
+        let frame_start = Instant::now();
+        // Gather whatever else arrives within this frame, bounded by MAX_FRAME_BYTES.
+        while pending.len() < MAX_FRAME_BYTES {
+            let Some(remaining) = FRAME.checked_sub(frame_start.elapsed()) else {
+                break; // frame elapsed
+            };
+            match rx.recv_timeout(remaining) {
+                Ok(chunk) => pending.extend_from_slice(&chunk),
+                Err(RecvTimeoutError::Timeout) => break,
+                Err(RecvTimeoutError::Disconnected) => {
+                    let _ = flush(&channel, &mut pending);
+                    return;
+                }
+            }
+        }
+        if flush(&channel, &mut pending).is_err() {
+            break; // frontend dropped the channel (pane closed)
         }
     }
-    let _ = flush(&channel, &mut pending);
 }
 
 fn flush(channel: &Channel<PtyChunk>, pending: &mut Vec<u8>) -> Result<(), tauri::Error> {
