@@ -1,0 +1,76 @@
+/*
+ * Five tokens, one theme. md-reader proves this set is enough to keep an app, its iframes and its
+ * exports visually consistent; deck starts with dark only (theme switching is deliberately v1.1).
+ */
+:root {
+  --bg: #16181d;
+  --fg: #d4d7dd;
+  --border: #2a2e37;
+  --accent: #7aa2f7;
+  --surface: #1c1f26;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* Placeholder for the Allotment splits that land in M4. */
+.deck {
+  display: grid;
+  grid-template-columns: 240px 1fr 260px;
+  height: 100%;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+}
+
+.explorer {
+  border-right: 1px solid var(--border);
+}
+
+.sessions {
+  border-left: 1px solid var(--border);
+}
+
+.workspace {
+  background: var(--bg);
+}
+
+.pane-title {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.placeholder {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  color: var(--accent);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  opacity: 0.35;
+}
