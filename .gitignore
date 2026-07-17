@@ -25,3 +25,6 @@ release/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 머신 고유: Rust target을 D:로 뺀다(C: 고갈 이력). 경로가 절대경로라 커밋하지 않는다.
+src/src-tauri/.cargo/
