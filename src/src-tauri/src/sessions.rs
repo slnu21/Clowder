@@ -163,7 +163,10 @@ fn assemble(
     do_liveness: bool,
     panes: &HashMap<u64, u32>,
 ) -> SessionsSnapshot {
-    let records = spool::read_sessions();
+    let mut records = spool::read_sessions();
+    // Both spool roots (Vigil + Clowder) can hold the same session. Apply oldest→newest so the freshest
+    // status wins the merge (ISO `statusSince` sorts chronologically).
+    records.sort_by(|a, b| a.status_since.cmp(&b.status_since));
     let mut inner = inner.lock().unwrap();
 
     // Merge spool records into the live model (Dead sessions are terminal — skip their apply).
@@ -212,9 +215,7 @@ fn assemble(
             .map(|(id, _)| id.clone())
             .collect();
         for id in reap {
-            if let Some(p) = spool::session_path(&id) {
-                let _ = std::fs::remove_file(p);
-            }
+            spool::reap_session(&id);
         }
     }
 
@@ -243,10 +244,14 @@ fn assemble(
 
     // Subagents grouped by session.
     let mut subs: HashMap<String, Vec<SubagentView>> = HashMap::new();
+    let mut seen_agents = std::collections::HashSet::new();
     for sa in spool::read_subagents() {
         let (Some(agent_id), Some(session_id)) = (sa.agent_id.clone(), sa.session_id.clone()) else {
             continue;
         };
+        if !seen_agents.insert(agent_id.clone()) {
+            continue; // same subagent written by both beacons — keep one
+        }
         subs.entry(session_id).or_default().push(SubagentView {
             agent_id,
             agent_type: sa.agent_type,

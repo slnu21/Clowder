@@ -1,3 +1,5 @@
+pub mod beacon;
+pub mod beacon_install;
 pub mod conpty_check;
 pub mod correlate;
 pub mod fs_ops;
@@ -51,6 +53,9 @@ pub fn run() {
             settings::get_settings,
             settings::save_settings,
             settings::resolve_shell_cmd,
+            beacon_install::beacon_installed,
+            beacon_install::beacon_install,
+            beacon_install::beacon_uninstall,
         ])
         .setup(|app| {
             // The session board watches Vigil's beacon spool on a background thread and pushes

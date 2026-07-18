@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
+import { beaconInstall, beaconInstalled, beaconUninstall } from "../../lib/beacon";
 import { leafIdForPty } from "../terminal/terminalPool";
 import { useWorkspace } from "../workspace/store";
 import {
@@ -46,6 +47,42 @@ export default function Sessions() {
     return () => clearInterval(id);
   }, []);
 
+  // Are Clowder's session-tracking hooks installed? `null` while loading (don't flash the prompt).
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    beaconInstalled()
+      .then((v) => !cancelled && setInstalled(v))
+      .catch(() => !cancelled && setInstalled(null));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const install = async () => {
+    setBusy(true);
+    try {
+      await beaconInstall();
+      setInstalled(true);
+    } catch {
+      /* fail-soft */
+    } finally {
+      setBusy(false);
+    }
+  };
+  const uninstall = async () => {
+    setBusy(true);
+    try {
+      await beaconUninstall();
+      setInstalled(false);
+    } catch {
+      /* fail-soft */
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const sessions = snap?.sessions ?? [];
   const waiting = snap?.waitingCount ?? 0;
 
@@ -57,7 +94,18 @@ export default function Sessions() {
       </div>
 
       <div className="session-list">
-        {sessions.length === 0 ? (
+        {installed === false ? (
+          <div className="track-prompt">
+            <div className="track-title">세션 추적이 꺼져 있어요</div>
+            <p className="track-desc">
+              설치하면 실행 중인 Claude Code 세션과 상태가 여기 표시됩니다. Claude Code 훅을 안전하게
+              추가하고, 기존 설정은 백업해 언제든 되돌릴 수 있습니다.
+            </p>
+            <button className="track-btn" onClick={install} disabled={busy}>
+              {busy ? "설치 중…" : "세션 추적 설치"}
+            </button>
+          </div>
+        ) : sessions.length === 0 ? (
           <div className="placeholder">세션 없음</div>
         ) : (
           sessions.map((s) => <SessionRow key={s.sessionId} s={s} now={now} />)
@@ -65,6 +113,17 @@ export default function Sessions() {
       </div>
 
       {snap && <UsageFooter usage={snap.usage} />}
+
+      {installed && (
+        <button
+          className="track-off"
+          onClick={uninstall}
+          disabled={busy}
+          title="Clowder 훅만 제거 — 다른 설정·훅은 보존"
+        >
+          세션 추적 끄기
+        </button>
+      )}
     </aside>
   );
 }
