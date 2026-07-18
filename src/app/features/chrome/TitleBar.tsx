@@ -15,7 +15,7 @@ export default function TitleBar() {
       <div className="titlebar-app" data-tauri-drag-region>
         <Icon name="terminal" size={14} />
         <span className="titlebar-name" data-tauri-drag-region>
-          deck
+          Clowder
         </span>
       </div>
       <div className="titlebar-controls">
