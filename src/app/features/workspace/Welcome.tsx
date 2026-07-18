@@ -23,7 +23,7 @@ export default function Welcome() {
     <div className="welcome">
       <div className="welcome-brand">
         <span className="welcome-dot" />
-        deck
+        Clowder
       </div>
       <p className="welcome-hint">폴더를 열어 터미널을 시작하거나, 즐겨찾기에서 선택하세요.</p>
 
