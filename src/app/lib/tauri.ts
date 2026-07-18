@@ -27,6 +27,15 @@ export const listDir = (path: string) => invoke<Entry[]>("list_dir", { path });
 /** Convenience starting point, not a workspace. */
 export const defaultRoot = () => invoke<string | null>("default_root");
 
+/** Read a file as text, normalizing newlines to LF (md/html viewers). */
+export async function readFile(path: string): Promise<string> {
+  const s = await invoke<string>("read_file", { path });
+  return s.replace(/\r\n?/g, "\n");
+}
+
+/** Read a file's bytes as base64 — for inlining a document's relative images as data URIs. */
+export const readFileBase64 = (path: string) => invoke<string>("read_file_base64", { path });
+
 /**
  * Start a shell and stream its output.
  *

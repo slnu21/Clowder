@@ -43,6 +43,8 @@ pub fn run() {
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,
+            fs_ops::read_file,
+            fs_ops::read_file_base64,
             quote::quote_path_cmd,
             sessions::sessions_snapshot,
         ])

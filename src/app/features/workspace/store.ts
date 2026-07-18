@@ -7,6 +7,7 @@ import {
   findLeaf,
   firstLeafId,
   makeTerminalLeaf,
+  makeViewerLeaf,
   nextId,
   Node,
   removeLeaf,
@@ -34,6 +35,8 @@ type State = {
   focusLeaf: (leafId: string) => void;
   /** From the explorer: every "open terminal here" is its own tab. */
   openTerminalTab: (cwd: string) => void;
+  /** Open a document (md/html) as its own viewer tab; re-focus an existing tab for the same path. */
+  openViewerTab: (path: string, kind: "md" | "html") => void;
   newTab: () => void;
   closeTab: (tabId: string) => void;
   splitPane: (paneId: string, dir: Direction) => void;
@@ -67,6 +70,19 @@ export const useWorkspace = create<State>((set, get) => ({
   openTerminalTab: (cwd) => {
     const tab = newTerminalTab(cwd);
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id, activePaneId: firstLeafId(tab.root) }));
+  },
+
+  openViewerTab: (path, kind) => {
+    const s = get();
+    // Re-focus an already-open single-pane viewer for this file rather than stacking duplicates.
+    const existing = s.tabs.find((t) => t.root.kind === "leaf" && t.root.path === path);
+    if (existing) {
+      set({ activeTabId: existing.id, activePaneId: existing.root.id });
+      return;
+    }
+    const leaf = makeViewerLeaf(path, kind);
+    const tab: Tab = { id: nextId("tab"), title: leaf.title, root: leaf };
+    set({ tabs: [...s.tabs, tab], activeTabId: tab.id, activePaneId: leaf.id });
   },
 
   newTab: () => {

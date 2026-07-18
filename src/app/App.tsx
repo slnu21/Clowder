@@ -9,10 +9,11 @@ import { useWorkspace } from "./features/workspace/store";
  */
 export default function App() {
   const openTerminalTab = useWorkspace((s) => s.openTerminalTab);
+  const openViewerTab = useWorkspace((s) => s.openViewerTab);
 
   return (
     <div className="deck">
-      <Explorer onOpenTerminal={openTerminalTab} />
+      <Explorer onOpenTerminal={openTerminalTab} onOpenFile={openViewerTab} />
 
       <Workspace />
 
