@@ -108,6 +108,24 @@ body {
   overflow: hidden;
 }
 
+/* Thin, theme-matched scrollbars — the default chunky OS scrollbar is the biggest tell that a dark
+   app is unfinished (WebView2 is Chromium, so ::-webkit-scrollbar applies everywhere incl. xterm). */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text-3) 55%, transparent);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-3) 80%, transparent);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner { background: transparent; }
+
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+
 button {
   font-family: inherit;
   cursor: default;
@@ -533,19 +551,25 @@ button {
 .session {
   padding: 9px 10px;
   border: 1px solid var(--line-1);
+  border-left: 3px solid var(--st-idle); /* status stripe — scan the rail at a glance */
   border-radius: 9px;
   background: var(--bg-overlay);
   cursor: default;
 }
 
 .session.awaiting_permission {
-  border-color: color-mix(in srgb, var(--st-permission) 50%, transparent);
+  border-color: color-mix(in srgb, var(--st-permission) 45%, transparent);
+  border-left-color: var(--st-permission);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-permission) 12%, transparent);
 }
+.session.awaiting_input { border-left-color: var(--st-input); }
+.session.working { border-left-color: var(--st-working); }
+.session.idle { border-left-color: var(--st-idle); }
+.session.dead { border-left-color: var(--st-dead); opacity: 0.55; }
 
-.session.dead { opacity: 0.55; }
-.session.linked { cursor: pointer; transition: border-color 0.12s ease; }
-.session.linked:hover { border-color: var(--line-2); }
+/* Hover cue is a background lift, not a border swap — keep the status stripe visible on hover. */
+.session.linked { cursor: pointer; transition: background-color 0.12s ease; }
+.session.linked:hover { background: color-mix(in srgb, var(--text-1) 6%, var(--bg-overlay)); }
 
 .session-head { display: flex; align-items: center; gap: 8px; }
 
@@ -658,6 +682,11 @@ button {
 .tab-new { margin: 0 4px; align-self: center; }
 .tab-close:hover,
 .tab-new:hover { background: var(--hover); color: var(--text-1); }
+
+/* Close reveals on hover or when active — declutters inactive tabs; the + stays put. */
+.tab-close { opacity: 0; transition: opacity 0.12s ease; }
+.tab:hover .tab-close,
+.tab.active .tab-close { opacity: 1; }
 
 .tabbody { position: relative; flex: 1; min-height: 0; }
 
