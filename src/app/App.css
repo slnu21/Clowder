@@ -119,15 +119,62 @@ button {
   outline-offset: -2px;
 }
 
-/* ── three-region shell ───────────────────────────────── */
+/* ── window shell: custom title bar over the three regions ── */
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .deck {
   display: grid;
   grid-template-columns: 248px 1fr 272px;
   /* Pin the row to the container: an auto row grows to its tallest content, and a few hundred tree
      rows would stretch every pane (and the terminal) far past the window. */
   grid-template-rows: minmax(0, 1fr);
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
+
+/* ── custom title bar (native decorations off) ────────── */
+.titlebar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 34px;
+  padding-left: 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--line-1);
+  user-select: none;
+}
+
+.titlebar-app { display: flex; align-items: center; gap: 8px; height: 100%; color: var(--text-3); }
+.titlebar-name { color: var(--text-1); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+.titlebar-controls { display: flex; margin-left: auto; height: 100%; }
+
+.tb-btn {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+}
+
+.tb-btn:hover { background: var(--hover); color: var(--text-1); }
+.tb-close:hover { background: var(--danger); color: #fff; }
+
+/* Edge/corner resize grips — restore resizing under the frameless window. */
+.rz { position: fixed; z-index: 900; }
+.rz-n { top: 0; left: 0; right: 0; height: 5px; cursor: ns-resize; }
+.rz-s { bottom: 0; left: 0; right: 0; height: 5px; cursor: ns-resize; }
+.rz-e { top: 0; right: 0; bottom: 0; width: 5px; cursor: ew-resize; }
+.rz-w { top: 0; left: 0; bottom: 0; width: 5px; cursor: ew-resize; }
+.rz-ne { top: 0; right: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.rz-nw { top: 0; left: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+.rz-se { bottom: 0; right: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+.rz-sw { bottom: 0; left: 0; width: 10px; height: 10px; cursor: nesw-resize; }
 
 .pane {
   display: flex;
