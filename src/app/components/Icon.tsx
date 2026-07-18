@@ -19,7 +19,9 @@ export type IconName =
   | "split-v"
   | "close"
   | "session-link"
-  | "plus";
+  | "plus"
+  | "minimize"
+  | "maximize";
 
 const SHAPES: Record<IconName, React.ReactNode> = {
   folder: (
@@ -84,6 +86,8 @@ const SHAPES: Record<IconName, React.ReactNode> = {
       <path d="M12 5v14" />
     </>
   ),
+  minimize: <path d="M5 12h14" />,
+  maximize: <rect width="14" height="14" x="5" y="5" rx="1.5" />,
 };
 
 export default function Icon({
