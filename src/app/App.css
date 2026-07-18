@@ -167,6 +167,7 @@ button {
 }
 
 .titlebar-app { display: flex; align-items: center; gap: 8px; height: 100%; color: var(--text-3); }
+.brandmark { flex: none; display: block; }
 .titlebar-name { color: var(--text-1); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
 .titlebar-controls { display: flex; margin-left: auto; height: 100%; }
 
