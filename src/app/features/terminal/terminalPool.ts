@@ -30,6 +30,8 @@ export type PoolEntry = {
 };
 
 const pool = new Map<string, PoolEntry>();
+/** Reverse index pty id → leaf id, so a correlated session row can focus its pane. */
+const ptyToLeaf = new Map<number, string>();
 
 export function acquire(leafId: string, cwd?: string): PoolEntry {
   const existing = pool.get(leafId);
@@ -64,6 +66,7 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
       return;
     }
     entry.ptyId = id;
+    ptyToLeaf.set(id, leafId);
     term.onData((d) => void ptyWrite(id, d));
     term.onResize(({ cols, rows }) => void ptyResize(id, cols, rows));
   })();
@@ -76,11 +79,17 @@ export function release(leafId: string): void {
   const entry = pool.get(leafId);
   if (!entry) return;
   entry.released = true;
-  if (entry.ptyId !== null) void ptyClose(entry.ptyId);
+  if (entry.ptyId !== null) {
+    ptyToLeaf.delete(entry.ptyId);
+    void ptyClose(entry.ptyId);
+  }
   entry.term.dispose();
   entry.el.remove();
   pool.delete(leafId);
 }
+
+/** Leaf id running under a given pty id — resolves a correlated session's pane. */
+export const leafIdForPty = (ptyId: number): string | undefined => ptyToLeaf.get(ptyId);
 
 /** Type text straight into a pane's shell (drag & drop path insertion). */
 export function writeToPane(leafId: string, data: string): void {

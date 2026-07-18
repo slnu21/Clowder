@@ -96,6 +96,22 @@ body {
   opacity: 0.5;
 }
 
+/* A session whose pane is open in this window: clickable, jumps to the tile. */
+.session.linked {
+  cursor: pointer;
+}
+
+.session.linked:hover {
+  background: rgb(255 255 255 / 5%);
+}
+
+.session-link {
+  flex: none;
+  color: var(--accent);
+  font-size: 12px;
+  opacity: 0.8;
+}
+
 .session-head {
   display: flex;
   align-items: center;

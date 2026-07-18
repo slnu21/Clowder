@@ -11,13 +11,15 @@
 //! reason for the plan's debounce/rescan/retry defenses was that it drops and duplicates events,
 //! which a poll simply doesn't. Sub-second latency is plenty for "don't miss a permission prompt".
 
+use crate::correlate;
 use crate::liveness::is_owner_alive;
+use crate::pty::PtyState;
 use crate::spool::{self, SessionRecord};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 const POLL: Duration = Duration::from_millis(500);
 /// Liveness is cheaper to check on a slower cadence than the spool re-read.
@@ -91,6 +93,8 @@ struct Session {
     claude_started_at: Option<String>,
     ctx_percent: Option<f64>,
     ctx_tokens: Option<String>,
+    /// Correlated pane, cached on first match — kept even after claude exits (can't re-walk a dead pid).
+    pane_id: Option<u64>,
 }
 
 impl Session {
@@ -137,7 +141,8 @@ pub fn start(app: AppHandle) -> SessionsState {
         let mut tick: u32 = 0;
         loop {
             let do_liveness = tick == 0 || tick % LIVENESS_EVERY == 0; // startup sweep, then every 10 s
-            let snapshot = assemble(&inner, do_liveness);
+            let panes = app.state::<PtyState>().pane_pids();
+            let snapshot = assemble(&inner, do_liveness, &panes);
             {
                 let mut prev = t_last.lock().unwrap();
                 if *prev != snapshot {
@@ -153,7 +158,11 @@ pub fn start(app: AppHandle) -> SessionsState {
     SessionsState { last }
 }
 
-fn assemble(inner: &Arc<Mutex<Inner>>, do_liveness: bool) -> SessionsSnapshot {
+fn assemble(
+    inner: &Arc<Mutex<Inner>>,
+    do_liveness: bool,
+    panes: &HashMap<u64, u32>,
+) -> SessionsSnapshot {
     let records = spool::read_sessions();
     let mut inner = inner.lock().unwrap();
 
@@ -165,6 +174,25 @@ fn assemble(inner: &Arc<Mutex<Inner>>, do_liveness: bool) -> SessionsSnapshot {
         let s = inner.sessions.entry(id).or_default();
         if !s.dead {
             s.apply(r);
+        }
+    }
+
+    // Correlate sessions we haven't placed yet: walk each one's claude pid up the process tree to a
+    // pane shell. The parent-map snapshot is built at most once per tick, and only when there's an
+    // uncorrelated session with a live pid and at least one pane to match against.
+    if !panes.is_empty()
+        && inner
+            .sessions
+            .values()
+            .any(|s| s.pane_id.is_none() && s.claude_pid.is_some_and(|p| p > 0))
+    {
+        let parent = correlate::build_parent_map();
+        for s in inner.sessions.values_mut() {
+            if s.pane_id.is_none() {
+                if let Some(pid) = s.claude_pid.filter(|p| *p > 0) {
+                    s.pane_id = correlate::find_owning_pane(&parent, pid as u32, panes);
+                }
+            }
         }
     }
 
@@ -245,7 +273,7 @@ fn assemble(inner: &Arc<Mutex<Inner>>, do_liveness: bool) -> SessionsSnapshot {
                 tool_name: s.tool_name.clone(),
                 ctx_percent: s.ctx_percent,
                 ctx_tokens: s.ctx_tokens.clone(),
-                pane_id: None, // correlation lands in Phase B
+                pane_id: s.pane_id,
                 subagents: subs.remove(id).unwrap_or_default(),
             }
         })

@@ -30,6 +30,8 @@ type State = {
 
   setActiveTab: (tabId: string) => void;
   setActivePane: (paneId: string) => void;
+  /** Reveal and focus a specific leaf wherever it lives (a session row clicking through to its pane). */
+  focusLeaf: (leafId: string) => void;
   /** From the explorer: every "open terminal here" is its own tab. */
   openTerminalTab: (cwd: string) => void;
   newTab: () => void;
@@ -53,6 +55,13 @@ export const useWorkspace = create<State>((set, get) => ({
   setActivePane: (paneId) => {
     set({ activePaneId: paneId });
     focusPane(paneId);
+  },
+
+  focusLeaf: (leafId) => {
+    const tab = get().tabs.find((t) => collectLeafIds(t.root).includes(leafId));
+    if (!tab) return; // pane already closed — the session's shell outlived its tile
+    set({ activeTabId: tab.id, activePaneId: leafId });
+    focusPane(leafId);
   },
 
   openTerminalTab: (cwd) => {

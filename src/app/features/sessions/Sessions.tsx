@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { leafIdForPty } from "../terminal/terminalPool";
+import { useWorkspace } from "../workspace/store";
 import {
   onSessionsUpdate,
   sessionsSnapshot,
@@ -67,11 +69,20 @@ export default function Sessions() {
 }
 
 function SessionRow({ s, now }: { s: SessionView; now: number }) {
+  const focusLeaf = useWorkspace((w) => w.focusLeaf);
+  // A correlated session (paneId set) still resolves to a live tile only if that pane is still open.
+  const linkedLeaf = s.paneId != null ? leafIdForPty(s.paneId) : undefined;
+
   return (
-    <div className={"session " + s.status}>
+    <div
+      className={"session " + s.status + (linkedLeaf ? " linked" : "")}
+      onMouseDown={() => linkedLeaf && focusLeaf(linkedLeaf)}
+      title={linkedLeaf ? "이 세션의 페인으로 이동" : undefined}
+    >
       <div className="session-head">
         <span className={"badge " + s.status} />
         <span className="session-project">{s.project}</span>
+        {linkedLeaf && <span className="session-link" title="이 페인에서 실행 중">⤷</span>}
         <span className="session-elapsed">{elapsed(s.statusSince, now)}</span>
       </div>
       <div className="session-meta">

@@ -1,4 +1,5 @@
 pub mod conpty_check;
+pub mod correlate;
 pub mod fs_ops;
 pub mod liveness;
 pub mod pty;
