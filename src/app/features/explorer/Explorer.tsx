@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Icon from "../../components/Icon";
 import { defaultRoot, listDir, listDrives, type Entry } from "../../lib/tauri";
 import SettingsPopover from "../settings/SettingsPopover";
 import { useSettings } from "../settings/store";
@@ -184,8 +185,10 @@ function Node({
         onContextMenu={(e) => onMenu(e, entry)}
         title={entry.path}
       >
-        <span className="twisty">{entry.isDir ? (isOpen ? "▾" : "▸") : ""}</span>
-        <span className="icon">{entry.isDir ? "📁" : "📄"}</span>
+        <span className="twisty">
+          {entry.isDir ? <Icon name={isOpen ? "chevron-down" : "chevron-right"} size={12} /> : null}
+        </span>
+        <Icon name={entry.isDir ? "folder" : "file"} className={entry.isDir ? "folder" : "file"} size={14} />
         <span className="name">{entry.name}</span>
       </div>
 

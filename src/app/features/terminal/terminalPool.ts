@@ -35,6 +35,32 @@ const pool = new Map<string, PoolEntry>();
 /** Reverse index pty id → leaf id, so a correlated session row can focus its pane. */
 const ptyToLeaf = new Map<number, string>();
 
+/**
+ * The xterm colours, read live from the app's design tokens so a terminal matches whatever theme and
+ * accent are active. `--accent`/`--bg-inset` resolve to the theme-tuned hex the CSS already computed,
+ * so the cursor tracks the user's accent choice. `retheme()` re-applies these to every open terminal
+ * when the theme flips — the shells keep running, only their palette changes.
+ */
+function xtermTheme(): { background: string; foreground: string; cursor: string; cursorAccent: string; selectionBackground: string } {
+  const rs = getComputedStyle(document.documentElement);
+  const v = (name: string, fallback: string) => rs.getPropertyValue(name).trim() || fallback;
+  const light = useSettings.getState().settings.theme === "light";
+  const bg = v("--bg-inset", light ? "#f3f1ec" : "#0f0f0e");
+  return {
+    background: bg,
+    foreground: v("--text-1", light ? "#262420" : "#e8e6e1"),
+    cursor: v("--accent", "#c8a15c"),
+    cursorAccent: bg,
+    selectionBackground: light ? "rgba(38,36,32,0.16)" : "rgba(232,230,225,0.16)",
+  };
+}
+
+/** Re-apply the current theme's palette to every live terminal (called when theme/accent changes). */
+export function retheme(): void {
+  const theme = xtermTheme();
+  for (const entry of pool.values()) entry.term.options.theme = theme;
+}
+
 export function acquire(leafId: string, cwd?: string): PoolEntry {
   const existing = pool.get(leafId);
   if (existing) return existing;
@@ -47,7 +73,7 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
     fontSize: s.terminalFontSize,
     scrollback: s.scrollback, // bounded: scrollback is the other place a flood turns into memory
     cursorBlink: true,
-    theme: { background: "#16181d", foreground: "#d4d7dd" },
+    theme: xtermTheme(),
   });
   const fit = new FitAddon();
   term.loadAddon(fit);

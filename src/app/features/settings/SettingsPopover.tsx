@@ -1,6 +1,15 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
+import Icon from "../../components/Icon";
 import { useSettings } from "./store";
+
+/** Accent choices — key persisted to settings, swatch shown in the picker (dark-mode hex as reference). */
+const ACCENTS = [
+  { key: "amber", label: "앰버", swatch: "#c8a15c" },
+  { key: "sage", label: "세이지", swatch: "#9fae7a" },
+  { key: "clay", label: "클레이", swatch: "#c78a6a" },
+  { key: "neutral", label: "뉴트럴", swatch: "#b8b1a4" },
+] as const;
 
 /**
  * The whole settings surface: a gear button that opens one popover (no settings window, no SQLite —
@@ -47,11 +56,48 @@ export default function SettingsPopover() {
         aria-expanded={openState}
         onClick={() => setOpenState((v) => !v)}
       >
-        ⚙
+        <Icon name="settings" size={15} />
       </button>
 
       {openState && (
         <div className="settings-pop" role="dialog" aria-label="설정">
+          <div className="set-group">모양</div>
+
+          <div className="set-row">
+            <span>테마</span>
+            <div className="set-seg">
+              {(["dark", "light"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={s.theme === k}
+                  className={s.theme === k ? "on" : ""}
+                  onClick={() => update({ theme: k })}
+                >
+                  {k === "dark" ? "다크" : "라이트"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="set-row">
+            <span>액센트</span>
+            <div className="set-accent">
+              {ACCENTS.map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  title={a.label}
+                  aria-label={a.label}
+                  aria-pressed={s.accent === a.key}
+                  className={s.accent === a.key ? "on" : ""}
+                  style={{ ["--sw"]: a.swatch } as React.CSSProperties}
+                  onClick={() => update({ accent: a.key })}
+                />
+              ))}
+            </div>
+          </div>
+
           <div className="set-group">셸</div>
 
           <div className="set-row">
@@ -166,7 +212,7 @@ export default function SettingsPopover() {
                     title="제거"
                     onClick={() => update({ favorites: s.favorites.filter((x) => x !== f) })}
                   >
-                    ×
+                    <Icon name="close" size={13} />
                   </button>
                 </div>
               ))}
