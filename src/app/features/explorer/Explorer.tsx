@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { defaultRoot, listDir, listDrives, type Entry } from "../../lib/tauri";
-import { viewerKindFor } from "../workspace/model";
+import SettingsPopover from "../settings/SettingsPopover";
+import { useSettings } from "../settings/store";
+import { basename, viewerKindFor } from "../workspace/model";
 
 /**
  * Full-filesystem explorer. Roots are drives; there is no workspace, which is the whole point —
@@ -22,6 +24,8 @@ export default function Explorer({
   /** path -> children. Absence means "not loaded yet"; an empty array means "loaded, empty". */
   const [children, setChildren] = useState<Map<string, Entry[]>>(new Map());
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null);
+  const favorites = useSettings((st) => st.settings.favorites);
+  const favEntries: Entry[] = favorites.map((p) => ({ name: basename(p), path: p, isDir: true, hidden: false }));
 
   useEffect(() => {
     void (async () => {
@@ -81,8 +85,31 @@ export default function Explorer({
 
   return (
     <div className="pane explorer" onClick={() => setMenu(null)}>
-      <div className="pane-title">탐색기</div>
+      <div className="pane-title">
+        <span>탐색기</span>
+        <SettingsPopover />
+      </div>
       <div className="tree">
+        {favEntries.length > 0 && (
+          <>
+            <div className="tree-label">즐겨찾기</div>
+            {favEntries.map((r) => (
+              <Node
+                key={"fav:" + r.path}
+                entry={r}
+                depth={0}
+                expanded={expanded}
+                children_={children}
+                onToggle={activate}
+                onMenu={(e, entry) => {
+                  e.preventDefault();
+                  setMenu({ x: e.clientX, y: e.clientY, entry });
+                }}
+              />
+            ))}
+            <div className="tree-label">드라이브</div>
+          </>
+        )}
         {roots.map((r) => (
           <Node
             key={r.path}

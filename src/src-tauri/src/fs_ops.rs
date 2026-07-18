@@ -101,10 +101,13 @@ fn is_hidden_attr(_e: &fs::DirEntry) -> bool {
     false
 }
 
-/// Where the explorer opens. The Workspace folder if it exists, else the user profile — a
-/// convenience default only; M7 makes it a setting.
+/// Where the explorer opens: the configured start path if set, else the Workspace folder, else the
+/// user profile.
 #[tauri::command]
 pub fn default_root() -> Option<String> {
+    if let Some(configured) = crate::settings::start_root() {
+        return Some(configured);
+    }
     let home = std::env::var_os("USERPROFILE")?;
     let ws = Path::new(&home).join("Documents").join("Workspace");
     let pick = if ws.is_dir() { ws } else { Path::new(&home).to_path_buf() };
