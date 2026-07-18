@@ -87,6 +87,19 @@ export function collectLeafIds(node: Node, acc: string[] = []): string[] {
 }
 
 /**
+ * cwd of the first terminal leaf in a tree — used to scope the workspace explorer tab to the folder a
+ * terminal was launched in. `undefined` if no terminal in the tree has a cwd (e.g. a blank `새 탭`).
+ */
+export function firstTerminalCwd(node: Node): string | undefined {
+  if (node.kind === "leaf") return node.content === "terminal" ? node.cwd : undefined;
+  for (const c of node.children) {
+    const cwd = firstTerminalCwd(c);
+    if (cwd) return cwd;
+  }
+  return undefined;
+}
+
+/**
  * Replace leaf `targetId` with a split of `[thatLeaf, newLeaf]`. Branches that don't contain the
  * target are rebuilt with the SAME `id`, so React keeps their subtrees (and Allotment its sizes).
  */
