@@ -1,30 +1,19 @@
-import { useState } from "react";
 import Explorer from "./features/explorer/Explorer";
-import Terminal from "./features/terminal/Terminal";
+import Workspace from "./features/workspace/Workspace";
+import { useWorkspace } from "./features/workspace/store";
 
 /**
- * The three regions. Left = full filesystem explorer, centre = terminal, right = session tree (M5).
- *
- * The centre still holds exactly one terminal; "open terminal here" replaces it. M4 turns the grid
- * into Allotment splits so a tab can hold a tree of panes and this becomes an addition, not a swap.
+ * The three regions. Left = full filesystem explorer, centre = tabbed/tileable workspace, right =
+ * session tree (M5). "Open terminal here" from the explorer opens the folder as its own tab.
  */
 export default function App() {
-  const [cwd, setCwd] = useState<string | undefined>(undefined);
-  /** Remounts Terminal so a new cwd means a fresh shell rather than a `cd` typed into the old one. */
-  const [gen, setGen] = useState(0);
+  const openTerminalTab = useWorkspace((s) => s.openTerminalTab);
 
   return (
     <div className="deck">
-      <Explorer
-        onOpenTerminal={(path) => {
-          setCwd(path);
-          setGen((g) => g + 1);
-        }}
-      />
+      <Explorer onOpenTerminal={openTerminalTab} />
 
-      <main className="pane workspace">
-        <Terminal key={gen} cwd={cwd} />
-      </main>
+      <Workspace />
 
       <aside className="pane sessions">
         <div className="pane-title">세션</div>
