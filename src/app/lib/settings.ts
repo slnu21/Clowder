@@ -9,6 +9,10 @@ export type Settings = {
   scrollback: number;
   startPath: string | null;
   favorites: string[];
+  /** UI theme. Applied as `data-theme` on the document root. */
+  theme: "dark" | "light";
+  /** Accent key: amber | sage | clay | neutral. Applied as `data-accent`; everything derives from --accent. */
+  accent: string;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -19,6 +23,8 @@ export const DEFAULT_SETTINGS: Settings = {
   scrollback: 5000,
   startPath: null,
   favorites: [],
+  theme: "dark",
+  accent: "amber",
 };
 
 export const getSettings = () => invoke<Settings>("get_settings");

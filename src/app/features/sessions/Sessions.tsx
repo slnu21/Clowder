@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Icon from "../../components/Icon";
 import { leafIdForPty } from "../terminal/terminalPool";
 import { useWorkspace } from "../workspace/store";
 import {
@@ -82,7 +83,11 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
       <div className="session-head">
         <span className={"badge " + s.status} />
         <span className="session-project">{s.project}</span>
-        {linkedLeaf && <span className="session-link" title="이 페인에서 실행 중">⤷</span>}
+        {linkedLeaf && (
+          <span className="session-link" title="이 페인에서 실행 중">
+            <Icon name="session-link" size={13} />
+          </span>
+        )}
         <span className="session-elapsed">{elapsed(s.statusSince, now)}</span>
       </div>
       <div className="session-meta">

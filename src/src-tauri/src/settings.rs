@@ -22,6 +22,11 @@ pub struct Settings {
     pub start_path: Option<String>,
     /// Pinned roots shown above the drives in the explorer.
     pub favorites: Vec<String>,
+    /// UI theme: `"dark"` | `"light"`. Applied as `data-theme` on the document root.
+    pub theme: String,
+    /// Accent key: `"amber"` | `"sage"` | `"clay"` | `"neutral"`. The whole UI derives from one
+    /// `--accent` token, so this single choice re-tints everything (theme-tuned in CSS).
+    pub accent: String,
 }
 
 impl Default for Settings {
@@ -34,6 +39,8 @@ impl Default for Settings {
             scrollback: 5000,
             start_path: None,
             favorites: Vec::new(),
+            theme: "dark".into(),
+            accent: "amber".into(),
         }
     }
 }

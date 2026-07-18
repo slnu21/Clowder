@@ -1,5 +1,6 @@
 import { Allotment } from "allotment";
 import "allotment/dist/style.css";
+import Icon from "../../components/Icon";
 import TerminalView from "../terminal/TerminalView";
 import { writeToPane } from "../terminal/terminalPool";
 import HtmlViewer from "../viewer/HtmlViewer";
@@ -55,13 +56,13 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
         <span className="tile-title">{leaf.title}</span>
         <span className="tile-actions">
           <button title="좌우 분할" onClick={() => splitPane(leaf.id, "row")}>
-            ⇔
+            <Icon name="split-h" size={13} />
           </button>
           <button title="상하 분할" onClick={() => splitPane(leaf.id, "column")}>
-            ⇕
+            <Icon name="split-v" size={13} />
           </button>
           <button title="닫기" onClick={() => closePane(leaf.id)}>
-            ×
+            <Icon name="close" size={13} />
           </button>
         </span>
       </div>

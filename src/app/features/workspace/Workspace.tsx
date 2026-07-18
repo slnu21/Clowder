@@ -1,3 +1,4 @@
+import Icon from "../../components/Icon";
 import TileTree from "./TileTree";
 import { useWorkspace } from "./store";
 
@@ -33,12 +34,12 @@ export default function Workspace() {
                 closeTab(t.id);
               }}
             >
-              ×
+              <Icon name="close" size={13} />
             </button>
           </div>
         ))}
         <button className="tab-new" title="새 탭" onClick={newTab}>
-          +
+          <Icon name="plus" size={14} />
         </button>
       </div>
 
