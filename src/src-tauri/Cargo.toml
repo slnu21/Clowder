@@ -20,7 +20,9 @@ tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# preserve_order: keep the user's settings.json key order when the beacon installer rewrites it
+# (default serde_json sorts keys alphabetically, which would scramble their config layout).
+serde_json = { version = "1", features = ["preserve_order"] }
 portable-pty = "0.9.0"
 base64 = "0.22.1"
 windows = { version = "0.61", features = [

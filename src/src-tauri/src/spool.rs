@@ -68,18 +68,28 @@ pub struct SubagentRecord {
     pub started_at: Option<String>,
 }
 
-/// `%LOCALAPPDATA%\Vigil` — the beacon's spool root. `None` if LOCALAPPDATA is unset (never on Windows).
+/// `%LOCALAPPDATA%\Vigil` — Vigil's beacon spool root. `None` if LOCALAPPDATA is unset (never on Windows).
 pub fn vigil_dir() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("Vigil"))
 }
 
-fn subdir(name: &str) -> Option<PathBuf> {
-    vigil_dir().map(|d| d.join(name))
+/// `%LOCALAPPDATA%\Clowder` — Clowder's OWN spool root, written by `clowder.exe --beacon`. Reading both
+/// this and Vigil's makes the rail self-sufficient (works without Vigil) yet loses nothing when Vigil is
+/// present.
+pub fn clowder_dir() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("Clowder"))
 }
 
-/// The path of a session spool file — exposed so a dead session can be reaped by the orchestrator.
-pub fn session_path(session_id: &str) -> Option<PathBuf> {
-    subdir("sessions").map(|d| d.join(format!("{session_id}.json")))
+/// The two spool roots we read, Clowder's first (its records win a tie on merge).
+fn roots() -> Vec<PathBuf> {
+    [clowder_dir(), vigil_dir()].into_iter().flatten().collect()
+}
+
+/// Delete a session's spool file from **both** roots — a dead session may live in either.
+pub fn reap_session(session_id: &str) {
+    for root in roots() {
+        let _ = std::fs::remove_file(root.join("sessions").join(format!("{session_id}.json")));
+    }
 }
 
 pub fn read_sessions() -> Vec<SessionRecord> {
@@ -97,18 +107,22 @@ pub fn read_subagents() -> Vec<SubagentRecord> {
     read_dir("subagents")
 }
 
-/// Read every `*.json` in a spool subdir, skipping unreadable or half-written files.
+/// Read every `*.json` in `<root>/<name>` across both spool roots, skipping unreadable/half-written files.
+/// Deduplication (a session written by both beacons) is the caller's concern — the orchestrator keeps the
+/// freshest by `statusSince`.
 fn read_dir<T: for<'de> Deserialize<'de>>(name: &str) -> Vec<T> {
-    let Some(dir) = subdir(name) else { return Vec::new() };
-    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
     let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        if let Some(rec) = try_read(&path) {
-            out.push(rec);
+    for root in roots() {
+        let dir = root.join(name);
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            if let Some(rec) = try_read(&path) {
+                out.push(rec);
+            }
         }
     }
     out
