@@ -8,9 +8,24 @@
 //! **Listing is one level and lazy.** md-reader's `read_dir_tree` recurses to depth 8, which is
 //! right for importing a project folder and fatal for `C:\` — this is a replacement, not a harvest.
 
+use base64::Engine as _;
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
+
+/// Read a file as UTF-8 text. Used by the md/html viewers; the frontend normalizes newlines.
+#[tauri::command]
+pub fn read_file(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+/// Read a file's bytes as base64 — for inlining a document's relative images as data URIs.
+/// (The asset protocol is blocked by CSP for fetch, so images come through IPC like md-reader's.)
+#[tauri::command]
+pub fn read_file_base64(path: String) -> Result<String, String> {
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

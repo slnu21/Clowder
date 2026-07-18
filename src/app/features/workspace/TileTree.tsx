@@ -2,6 +2,8 @@ import { Allotment } from "allotment";
 import "allotment/dist/style.css";
 import TerminalView from "../terminal/TerminalView";
 import { writeToPane } from "../terminal/terminalPool";
+import HtmlViewer from "../viewer/HtmlViewer";
+import MdViewer from "../viewer/MdViewer";
 import { Leaf, Node } from "./model";
 import { useWorkspace } from "./store";
 import { quotePath, ShellKind } from "../../lib/quote";
@@ -66,8 +68,12 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
       <div className="tile-body">
         {leaf.content === "terminal" ? (
           <TerminalView leafId={leaf.id} cwd={leaf.cwd} />
+        ) : leaf.content === "md" && leaf.path ? (
+          <MdViewer path={leaf.path} />
+        ) : leaf.content === "html" && leaf.path ? (
+          <HtmlViewer path={leaf.path} />
         ) : (
-          <div className="placeholder">M6</div>
+          <div className="placeholder">?</div>
         )}
       </div>
     </div>

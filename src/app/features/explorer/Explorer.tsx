@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { defaultRoot, listDir, listDrives, type Entry } from "../../lib/tauri";
+import { viewerKindFor } from "../workspace/model";
 
 /**
  * Full-filesystem explorer. Roots are drives; there is no workspace, which is the whole point —
@@ -9,7 +10,13 @@ import { defaultRoot, listDir, listDrives, type Entry } from "../../lib/tauri";
  * **Children load on expand, one level at a time.** Never recursive: md-reader's `read_dir_tree`
  * walks to depth 8, which is right for importing a project and would hang on `C:\`.
  */
-export default function Explorer({ onOpenTerminal }: { onOpenTerminal: (cwd: string) => void }) {
+export default function Explorer({
+  onOpenTerminal,
+  onOpenFile,
+}: {
+  onOpenTerminal: (cwd: string) => void;
+  onOpenFile: (path: string, kind: "md" | "html") => void;
+}) {
   const [roots, setRoots] = useState<Entry[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   /** path -> children. Absence means "not loaded yet"; an empty array means "loaded, empty". */
@@ -62,6 +69,16 @@ export default function Explorer({ onOpenTerminal }: { onOpenTerminal: (cwd: str
     setExpanded(next);
   }
 
+  /** Row click: fold/unfold a folder, or open a viewable file in the workspace. */
+  function activate(entry: Entry) {
+    if (entry.isDir) {
+      void toggle(entry);
+      return;
+    }
+    const kind = viewerKindFor(entry.name);
+    if (kind) onOpenFile(entry.path, kind);
+  }
+
   return (
     <div className="pane explorer" onClick={() => setMenu(null)}>
       <div className="pane-title">탐색기</div>
@@ -73,7 +90,7 @@ export default function Explorer({ onOpenTerminal }: { onOpenTerminal: (cwd: str
             depth={0}
             expanded={expanded}
             children_={children}
-            onToggle={toggle}
+            onToggle={activate}
             onMenu={(e, entry) => {
               e.preventDefault();
               setMenu({ x: e.clientX, y: e.clientY, entry });
@@ -93,6 +110,20 @@ export default function Explorer({ onOpenTerminal }: { onOpenTerminal: (cwd: str
           >
             여기서 터미널 열기
           </button>
+          {(() => {
+            const kind = menu.entry.isDir ? null : viewerKindFor(menu.entry.name);
+            return (
+              <button
+                disabled={!kind}
+                onClick={() => {
+                  if (kind) onOpenFile(menu.entry.path, kind);
+                  setMenu(null);
+                }}
+              >
+                열기 (뷰어)
+              </button>
+            );
+          })()}
         </div>
       )}
     </div>

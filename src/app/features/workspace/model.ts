@@ -55,6 +55,17 @@ export function makeTerminalLeaf(cwd?: string): Leaf {
   return { kind: "leaf", id: nextId("p"), content: "terminal", cwd, title: cwd ? basename(cwd) : "bash" };
 }
 
+export function makeViewerLeaf(path: string, content: "md" | "html"): Leaf {
+  return { kind: "leaf", id: nextId("p"), content, path, title: basename(path) };
+}
+
+/** Which viewer (if any) opens a file, by extension. `null` = not a viewable document. */
+export function viewerKindFor(name: string): "md" | "html" | null {
+  if (/\.(md|markdown|mdx|txt)$/i.test(name)) return "md";
+  if (/\.html?$/i.test(name)) return "html";
+  return null;
+}
+
 export function findLeaf(node: Node, id: string): Leaf | undefined {
   if (node.kind === "leaf") return node.id === id ? node : undefined;
   for (const c of node.children) {
