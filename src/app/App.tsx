@@ -1,4 +1,5 @@
 import Explorer from "./features/explorer/Explorer";
+import Sessions from "./features/sessions/Sessions";
 import Workspace from "./features/workspace/Workspace";
 import { useWorkspace } from "./features/workspace/store";
 
@@ -15,10 +16,7 @@ export default function App() {
 
       <Workspace />
 
-      <aside className="pane sessions">
-        <div className="pane-title">세션</div>
-        <div className="placeholder">M5</div>
-      </aside>
+      <Sessions />
     </div>
   );
 }
