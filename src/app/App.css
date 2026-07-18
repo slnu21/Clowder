@@ -614,6 +614,89 @@ button {
 
 .tabbody { position: relative; flex: 1; min-height: 0; }
 
+/* welcome / empty workspace (item 2: no forced first terminal) */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: 100%;
+  padding: 24px;
+}
+
+.welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+
+.welcome-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+
+.welcome-hint { margin: 0; color: var(--text-3); font-size: 13px; }
+
+.welcome-actions { display: flex; gap: 10px; margin-top: 4px; }
+
+.welcome-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+
+.welcome-actions button:hover { background: var(--hover); border-color: var(--accent); }
+
+.welcome-favs { display: flex; flex-direction: column; gap: 3px; width: min(440px, 100%); margin-top: 12px; }
+
+.welcome-favs-label {
+  padding: 0 6px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.welcome-fav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+}
+
+.welcome-fav:hover { background: var(--bg-raised); border-color: var(--line-1); }
+.welcome-fav .icon.folder { color: var(--accent); }
+.welcome-fav-name { flex: none; font-size: 13px; }
+.welcome-fav-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  direction: rtl;
+  text-align: right;
+}
+
 .tile {
   display: flex;
   flex-direction: column;

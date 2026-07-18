@@ -21,8 +21,6 @@ function newTerminalTab(cwd?: string): Tab {
   return { id: nextId("tab"), title: cwd ? basename(cwd) : "bash", root: leaf };
 }
 
-const firstTab = newTerminalTab();
-
 type State = {
   tabs: Tab[];
   activeTabId: string;
@@ -45,9 +43,11 @@ type State = {
 };
 
 export const useWorkspace = create<State>((set, get) => ({
-  tabs: [firstTab],
-  activeTabId: firstTab.id,
-  activePaneId: firstLeafId(firstTab.root),
+  // Start empty — the workspace shows a welcome screen until the user opens a terminal or a file.
+  // (No forced first terminal; that was the old behaviour item 2 asked to remove.)
+  tabs: [],
+  activeTabId: "",
+  activePaneId: null,
 
   setActiveTab: (tabId) => {
     const tab = get().tabs.find((t) => t.id === tabId);
@@ -97,8 +97,11 @@ export const useWorkspace = create<State>((set, get) => ({
     // Free every shell this tab owned before dropping it.
     for (const leafId of collectLeafIds(tab.root)) release(leafId);
 
-    let tabs = s.tabs.filter((t) => t.id !== tabId);
-    if (tabs.length === 0) tabs = [newTerminalTab()]; // always keep one tab open
+    const tabs = s.tabs.filter((t) => t.id !== tabId);
+    if (tabs.length === 0) {
+      set({ tabs, activeTabId: "", activePaneId: null }); // last tab closed → back to welcome
+      return;
+    }
 
     let { activeTabId } = s;
     if (activeTabId === tabId) {
