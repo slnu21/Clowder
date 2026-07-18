@@ -1,6 +1,7 @@
 pub mod conpty_check;
 pub mod fs_ops;
 pub mod pty;
+pub mod quote;
 pub mod selftest;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,6 +39,7 @@ pub fn run() {
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,
+            quote::quote_path_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
