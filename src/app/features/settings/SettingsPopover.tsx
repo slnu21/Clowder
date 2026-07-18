@@ -1,5 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Icon from "../../components/Icon";
 import { useSettings } from "./store";
 
@@ -20,14 +21,37 @@ const ACCENTS = [
  */
 export default function SettingsPopover() {
   const [openState, setOpenState] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const gearRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const s = useSettings((x) => x.settings);
   const update = useSettings((x) => x.update);
+
+  // Anchor the portalled popover under the gear; recompute on open and on window resize.
+  useLayoutEffect(() => {
+    if (!openState) return;
+    const place = () => {
+      const g = gearRef.current?.getBoundingClientRect();
+      if (!g) return;
+      const width = 292;
+      const margin = 8;
+      setPos({
+        top: g.bottom + 6,
+        left: Math.min(Math.max(margin, g.left), window.innerWidth - width - margin),
+      });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [openState]);
 
   useEffect(() => {
     if (!openState) return;
     const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpenState(false);
+      const t = e.target as Node;
+      // The popover is portalled out of the wrap, so check both the gear and the popover.
+      if (gearRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpenState(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpenState(false);
     document.addEventListener("mousedown", onDoc);
@@ -48,8 +72,9 @@ export default function SettingsPopover() {
   };
 
   return (
-    <div className="settings-wrap" ref={wrapRef}>
+    <div className="settings-wrap">
       <button
+        ref={gearRef}
         type="button"
         className="settings-gear"
         title="설정"
@@ -59,8 +84,15 @@ export default function SettingsPopover() {
         <Icon name="settings" size={15} />
       </button>
 
-      {openState && (
-        <div className="settings-pop" role="dialog" aria-label="설정">
+      {openState &&
+        createPortal(
+          <div
+            className="settings-pop"
+            role="dialog"
+            aria-label="설정"
+            ref={popRef}
+            style={{ top: pos.top, left: pos.left }}
+          >
           <div className="set-group">모양</div>
 
           <div className="set-row">
@@ -230,8 +262,9 @@ export default function SettingsPopover() {
           </div>
 
           <div className="set-note">셸·글꼴·크기·스크롤백은 새로 여는 터미널부터 적용됩니다.</div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

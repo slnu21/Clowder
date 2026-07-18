@@ -267,11 +267,11 @@ button {
 .settings-gear:hover { background: var(--hover); color: var(--text-1); }
 .settings-gear[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--line-2); color: var(--text-1); }
 
+/* Portalled to <body> and positioned from the gear's rect (top/left inline), so no ancestor's
+   stacking context or overflow can trap or clip it. */
 .settings-pop {
-  position: absolute;
-  top: 30px;
-  left: 0;
-  z-index: 50;
+  position: fixed;
+  z-index: 1000;
   width: 292px;
   max-height: 78vh;
   overflow-y: auto;
