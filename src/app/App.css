@@ -59,6 +59,189 @@ body {
   border-left: 1px solid var(--border);
 }
 
+/* --- session board (right rail) --- */
+
+:root {
+  --st-permission: #f7768e; /* 승인 대기 — urgent, top of the rail */
+  --st-input: #7aa2f7; /* 내 차례 */
+  --st-working: #9ece6a; /* 동작 중 */
+  --st-idle: #565f89; /* 유휴 */
+  --st-dead: #414868; /* 종료됨 */
+}
+
+.waiting-badge {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--st-permission);
+  color: #10131a;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.session {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: default;
+}
+
+.session.dead {
+  opacity: 0.5;
+}
+
+/* A session whose pane is open in this window: clickable, jumps to the tile. */
+.session.linked {
+  cursor: pointer;
+}
+
+.session.linked:hover {
+  background: rgb(255 255 255 / 5%);
+}
+
+.session-link {
+  flex: none;
+  color: var(--accent);
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.session-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.badge {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--st-idle);
+}
+
+.badge.awaiting_permission {
+  background: var(--st-permission);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-permission) 30%, transparent);
+}
+.badge.awaiting_input {
+  background: var(--st-input);
+}
+.badge.working {
+  background: var(--st-working);
+}
+.badge.idle {
+  background: var(--st-idle);
+}
+.badge.dead {
+  background: var(--st-dead);
+}
+
+.session-project {
+  flex: 1;
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.session-elapsed {
+  flex: none;
+  color: var(--fg);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.session-meta {
+  margin: 2px 0 0 15px;
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+.session-tool,
+.session-ctx {
+  margin-left: 3px;
+}
+
+.subagents {
+  margin: 4px 0 0 15px;
+}
+
+.subagent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.7;
+  opacity: 0.75;
+}
+
+.subagent-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--st-working);
+}
+
+.subagent-name {
+  color: var(--accent);
+}
+
+.subagent-desc {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+}
+
+.usage-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.usage-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  line-height: 2;
+}
+
+.usage-label {
+  flex: none;
+  width: 34px;
+  opacity: 0.6;
+}
+
+.usage-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.usage-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.usage-pct {
+  flex: none;
+  width: 30px;
+  text-align: right;
+  opacity: 0.6;
+}
+
 .workspace {
   background: var(--bg);
   overflow: hidden;

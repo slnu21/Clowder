@@ -37,12 +37,27 @@ pub struct Pane {
     writer: Box<dyn Write + Send>,
     /// Kept so the child is reaped on close rather than left behind.
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    /// The spawned shell's OS pid — an ancestor of any `claude.exe` run in this pane, so session
+    /// correlation can walk up to it. `None` if portable-pty couldn't report it.
+    shell_pid: Option<u32>,
 }
 
 #[derive(Default)]
 pub struct PtyState {
     panes: Mutex<HashMap<u64, Pane>>,
     next_id: AtomicU64,
+}
+
+impl PtyState {
+    /// pty id → spawned shell pid, for session correlation. Skips panes with no reported pid.
+    pub fn pane_pids(&self) -> HashMap<u64, u32> {
+        self.panes
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(&id, p)| p.shell_pid.map(|pid| (id, pid)))
+            .collect()
+    }
 }
 
 /// Wrap a shell so its console starts in UTF-8.
@@ -90,8 +105,9 @@ pub fn pty_spawn(
     let reader = pair.master.try_clone_reader().map_err(|e| format!("reader: {e}"))?;
     let writer = pair.master.take_writer().map_err(|e| format!("writer: {e}"))?;
 
+    let shell_pid = child.process_id();
     let id = state.next_id.fetch_add(1, Ordering::Relaxed);
-    state.panes.lock().unwrap().insert(id, Pane { pair, writer, child });
+    state.panes.lock().unwrap().insert(id, Pane { pair, writer, child, shell_pid });
 
     std::thread::spawn(move || read_loop(reader, on_data));
 

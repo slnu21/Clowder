@@ -1,8 +1,12 @@
 pub mod conpty_check;
+pub mod correlate;
 pub mod fs_ops;
+pub mod liveness;
 pub mod pty;
 pub mod quote;
 pub mod selftest;
+pub mod sessions;
+pub mod spool;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,7 +44,16 @@ pub fn run() {
             fs_ops::list_dir,
             fs_ops::default_root,
             quote::quote_path_cmd,
+            sessions::sessions_snapshot,
         ])
+        .setup(|app| {
+            // The session board watches Vigil's beacon spool on a background thread and pushes
+            // updates to the frontend. It needs the AppHandle to emit, so it starts here.
+            use tauri::Manager;
+            let handle = app.handle().clone();
+            app.manage(sessions::start(handle));
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
