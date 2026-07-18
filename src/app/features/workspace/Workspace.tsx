@@ -1,5 +1,6 @@
 import Icon from "../../components/Icon";
 import TileTree from "./TileTree";
+import Welcome from "./Welcome";
 import { useWorkspace } from "./store";
 
 /**
@@ -43,7 +44,7 @@ export default function Workspace() {
         </button>
       </div>
 
-      <div className="tabbody">{active && <TileTree key={active.id} node={active.root} />}</div>
+      <div className="tabbody">{active ? <TileTree key={active.id} node={active.root} /> : <Welcome />}</div>
     </main>
   );
 }
