@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useSettings } from "../settings/store";
 import { focusPane, release } from "../terminal/terminalPool";
 import {
   basename,
@@ -16,9 +17,16 @@ import {
   Tab,
 } from "./model";
 
+/** Label for a shell-less terminal (no launch folder) — reflects the configured shell, not a fixed
+ * "bash". Read at creation time, matching how font/scrollback apply to newly opened terminals. */
+function shellLabel(): string {
+  return useSettings.getState().settings.shell === "powershell" ? "PowerShell" : "bash";
+}
+
 function newTerminalTab(cwd?: string): Tab {
-  const leaf = makeTerminalLeaf(cwd);
-  return { id: nextId("tab"), title: cwd ? basename(cwd) : "bash", root: leaf };
+  const label = shellLabel();
+  const leaf = makeTerminalLeaf(cwd, label);
+  return { id: nextId("tab"), title: cwd ? basename(cwd) : label, root: leaf };
 }
 
 type State = {
@@ -119,7 +127,7 @@ export const useWorkspace = create<State>((set, get) => ({
     const target = findLeaf(tab.root, paneId);
     if (!target) return;
     // A split inherits the pane's cwd — splitting a project terminal gives you another in the same dir.
-    const leaf = makeTerminalLeaf(target.cwd);
+    const leaf = makeTerminalLeaf(target.cwd, shellLabel());
     const root = splitLeaf(tab.root, paneId, dir, leaf);
     set({
       tabs: s.tabs.map((t) => (t.id === tab.id ? { ...t, root } : t)),
