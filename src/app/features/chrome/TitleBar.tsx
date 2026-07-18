@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import BrandMark from "../../components/BrandMark";
 import Icon from "../../components/Icon";
 
 const appWindow = getCurrentWindow();
@@ -13,7 +14,7 @@ export default function TitleBar() {
   return (
     <div className="titlebar" data-tauri-drag-region>
       <div className="titlebar-app" data-tauri-drag-region>
-        <Icon name="terminal" size={14} />
+        <BrandMark size={18} />
         <span className="titlebar-name" data-tauri-drag-region>
           Clowder
         </span>
