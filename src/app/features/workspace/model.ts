@@ -51,8 +51,8 @@ export function basename(p: string): string {
   return seg.length > 0 ? seg : trimmed; // a drive root like "C:\" has no segment
 }
 
-export function makeTerminalLeaf(cwd?: string): Leaf {
-  return { kind: "leaf", id: nextId("p"), content: "terminal", cwd, title: cwd ? basename(cwd) : "bash" };
+export function makeTerminalLeaf(cwd?: string, fallbackTitle = "bash"): Leaf {
+  return { kind: "leaf", id: nextId("p"), content: "terminal", cwd, title: cwd ? basename(cwd) : fallbackTitle };
 }
 
 export function makeViewerLeaf(path: string, content: "md" | "html"): Leaf {
