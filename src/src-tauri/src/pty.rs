@@ -69,10 +69,24 @@ impl PtyState {
 /// Claude Code calls `SetConsoleOutputCP(65001)` itself at startup, so *its* output is fine either
 /// way — this is for everything else the user runs.
 fn build_command(shell: &str, cwd: Option<&str>) -> CommandBuilder {
-    let mut cmd = if shell.to_lowercase().ends_with("bash.exe") {
+    let lower = shell.to_lowercase();
+    let mut cmd = if lower.ends_with("bash.exe") {
         let mut c = CommandBuilder::new(shell);
         c.arg("-c");
         c.arg(r#"chcp.com 65001 >/dev/null 2>&1; exec "$BASH" --login -i"#);
+        c
+    } else if lower.ends_with("powershell.exe") || lower.ends_with("pwsh.exe") {
+        // PowerShell inherits the ConPTY console's OEM code page (CP949 here), so a program writing
+        // UTF-8 bytes renders as mojibake — the same trap `chcp 65001` fixes for bash. Force the
+        // console encodings to UTF-8 at startup, then stay interactive (`-NoExit`). pwsh (PS7) is
+        // already UTF-8, so this is a no-op there and the fix for Windows PowerShell 5.1.
+        let mut c = CommandBuilder::new(shell);
+        c.arg("-NoExit");
+        c.arg("-Command");
+        c.arg(
+            "$OutputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; \
+             [Console]::InputEncoding=[System.Text.Encoding]::UTF8",
+        );
         c
     } else {
         CommandBuilder::new(shell)

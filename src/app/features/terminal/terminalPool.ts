@@ -1,7 +1,9 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { defaultShell, ptyClose, ptyResize, ptySpawn, ptyWrite } from "../../lib/tauri";
+import { ptyClose, ptyResize, ptySpawn, ptyWrite } from "../../lib/tauri";
+import { resolveShell } from "../../lib/settings";
+import { useSettings } from "../settings/store";
 
 /**
  * A pool of live terminals keyed by leaf id, living **outside** React.
@@ -37,12 +39,13 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
   const existing = pool.get(leafId);
   if (existing) return existing;
 
+  const s = useSettings.getState().settings; // synchronous read; loaded before the first spawn
   const el = document.createElement("div");
   el.className = "xterm-host";
   const term = new Xterm({
-    fontFamily: '"D2Coding", "Cascadia Mono", Consolas, monospace',
-    fontSize: 14,
-    scrollback: 5000, // bounded: scrollback is the other place a flood turns into memory
+    fontFamily: `"${s.terminalFont}", "Cascadia Mono", Consolas, monospace`,
+    fontSize: s.terminalFontSize,
+    scrollback: s.scrollback, // bounded: scrollback is the other place a flood turns into memory
     cursorBlink: true,
     theme: { background: "#16181d", foreground: "#d4d7dd" },
   });
@@ -54,7 +57,7 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
   pool.set(leafId, entry);
 
   void (async () => {
-    const shell = await defaultShell();
+    const shell = await resolveShell();
     if (entry.released) return;
     // Bytes, not text — xterm.js stitches partial UTF-8 sequences across writes.
     const id = await ptySpawn(

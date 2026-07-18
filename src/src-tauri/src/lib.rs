@@ -6,6 +6,7 @@ pub mod pty;
 pub mod quote;
 pub mod selftest;
 pub mod sessions;
+pub mod settings;
 pub mod spool;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,6 +48,9 @@ pub fn run() {
             fs_ops::read_file_base64,
             quote::quote_path_cmd,
             sessions::sessions_snapshot,
+            settings::get_settings,
+            settings::save_settings,
+            settings::resolve_shell_cmd,
         ])
         .setup(|app| {
             // The session board watches Vigil's beacon spool on a background thread and pushes
