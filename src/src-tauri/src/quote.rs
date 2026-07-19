@@ -43,7 +43,7 @@ mod tests {
     fn table() {
         // (input, bash, powershell)
         let cases = [
-            (r"C:\Users\raltl\a.txt", r"'C:\Users\raltl\a.txt'", r"'C:\Users\raltl\a.txt'"),
+            (r"C:\Users\me\a.txt", r"'C:\Users\me\a.txt'", r"'C:\Users\me\a.txt'"),
             ("plain", "'plain'", "'plain'"),
             ("with space", "'with space'", "'with space'"),
             // The whole point: metacharacters stay literal inside single quotes.
