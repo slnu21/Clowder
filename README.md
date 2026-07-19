@@ -7,6 +7,8 @@
 
 Windows · 오프라인 / 로컬 전용 · [MIT](LICENSE)
 
+<img src="assets/screenshot.png" alt="Clowder — 파일 탐색기, 터미널, 실행 중인 Claude Code 세션 레일을 한 창에 / file explorer, terminal, and a live Claude Code session rail in one window" width="900">
+
 </div>
 
 ## 왜
