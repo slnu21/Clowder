@@ -98,8 +98,9 @@ export default function Sessions() {
           <div className="track-prompt">
             <div className="track-title">세션 추적이 꺼져 있어요</div>
             <p className="track-desc">
-              설치하면 실행 중인 Claude Code 세션과 상태가 여기 표시됩니다. Claude Code 훅을 안전하게
-              추가하고, 기존 설정은 백업해 언제든 되돌릴 수 있습니다.
+              설치하면 실행 중인 Claude Code 세션·상태와 사용량(컨텍스트·5시간·7일)이 여기 표시됩니다.
+              Claude Code 훅을 추가하고 상태줄(statusline)을 감싸 사용량을 읽습니다. 기존 상태줄과 설정은
+              백업·보존해, 끄면 원래대로 되돌립니다.
             </p>
             <button className="track-btn" onClick={install} disabled={busy}>
               {busy ? "설치 중…" : "세션 추적 설치"}
@@ -119,7 +120,7 @@ export default function Sessions() {
           className="track-off"
           onClick={uninstall}
           disabled={busy}
-          title="Clowder 훅만 제거 — 다른 설정·훅은 보존"
+          title="Clowder 훅·상태줄 래퍼만 제거 — 기존 statusline·다른 설정은 원복/보존"
         >
           세션 추적 끄기
         </button>
