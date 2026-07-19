@@ -9,6 +9,11 @@
 //! - **Surgical removal**: only entries whose command is a Clowder beacon are removed, so anything added
 //!   later (by the user or another tool) survives an uninstall.
 //!
+//! Path robustness: install stages this exe to a **stable per-user path** (`%LOCALAPPDATA%\Clowder\bin\
+//! clowder.exe`) and points the hooks + wrapper there, so tracking keeps working if the app itself is
+//! moved or reinstalled elsewhere. Startup refreshes that copy (when the running exe is newer) so an app
+//! update propagates its beacon logic without a reinstall.
+//!
 //! Usage self-production: install also wraps the user's statusline (`~/.claude/clowder-statusline-wrap.sh`)
 //! so Claude Code's statusline payload (context %/5h/7d budget) is teed to Clowder's usage spool before
 //! delegating to the user's *original* statusline. The original statusLine value is base64-preserved inside
@@ -284,6 +289,66 @@ fn backup(path: &Path) {
     }
 }
 
+// ---- beacon binary staging (path robustness) ----
+
+/// `%LOCALAPPDATA%\Clowder\bin` — a stable per-user home for the beacon binary, referenced by the hooks
+/// and the statusline wrapper so session tracking survives the app being moved or reinstalled elsewhere.
+fn beacon_bin_dir() -> Option<PathBuf> {
+    crate::spool::clowder_dir().map(|d| d.join("bin"))
+}
+
+/// Should we (re)stage the beacon binary? Yes if the staged copy is missing or the running exe is newer
+/// (an app update must propagate to the staged copy). Any stat error resolves to "yes" — copying is
+/// cheaper than running a stale beacon.
+fn should_restage(dst: &Path, src: &Path) -> bool {
+    match (
+        std::fs::metadata(dst).and_then(|m| m.modified()),
+        std::fs::metadata(src).and_then(|m| m.modified()),
+    ) {
+        (Ok(staged), Ok(running)) => running > staged,
+        _ => true,
+    }
+}
+
+/// Copy `src` into `bin_dir/clowder.exe` (temp+rename) when stale. Returns the forward-slashed stable
+/// path, or `None` if nothing is staged. A failed copy is non-fatal: a locked dst (a beacon running from
+/// it at that instant) keeps the existing copy, which is still a valid beacon.
+fn stage_binary(src: &Path, bin_dir: &Path) -> Option<String> {
+    std::fs::create_dir_all(bin_dir).ok()?;
+    let dst = bin_dir.join("clowder.exe");
+    if should_restage(&dst, src) {
+        let tmp = bin_dir.join("clowder.exe.new");
+        if std::fs::copy(src, &tmp).is_ok() {
+            let _ = std::fs::rename(&tmp, &dst); // dst locked → keep the old (still-valid) copy
+        } else {
+            let _ = std::fs::remove_file(&tmp);
+        }
+    }
+    dst.exists().then(|| dst.to_string_lossy().replace('\\', "/"))
+}
+
+/// Stage this exe to the stable bin path. `None` if staging failed (caller falls back to `current_exe`).
+fn ensure_beacon_binary() -> Option<String> {
+    let src = std::env::current_exe().ok()?;
+    stage_binary(&src, &beacon_bin_dir()?)
+}
+
+/// Delete the staged beacon binary on uninstall — nothing references it once the hooks are gone. Fail-soft.
+fn remove_beacon_binary() {
+    if let Some(dir) = beacon_bin_dir() {
+        let _ = std::fs::remove_file(dir.join("clowder.exe"));
+    }
+}
+
+/// Refresh the staged beacon binary on app startup **iff** tracking is installed — so an app update
+/// propagates its new beacon logic without a reinstall. Cheap (just a stat) on a normal launch.
+pub fn refresh_beacon_binary_on_startup() {
+    let Some(path) = settings_path() else { return };
+    if is_installed(&load(&path)) {
+        let _ = ensure_beacon_binary();
+    }
+}
+
 // ---- Tauri commands ----
 
 #[tauri::command]
@@ -297,13 +362,14 @@ pub fn beacon_installed() -> bool {
 #[tauri::command]
 pub fn beacon_install() -> Result<(), String> {
     let path = settings_path().ok_or("USERPROFILE unavailable")?;
-    let exe = exe_path().ok_or("cannot resolve clowder.exe path")?;
+    // Prefer the stable staged binary so hooks survive the app moving; fall back to the running exe.
+    let beacon = ensure_beacon_binary().or_else(exe_path).ok_or("cannot resolve clowder.exe path")?;
     backup(&path);
     let mut root = load(&path);
-    apply_install(&mut root, &format!("\"{exe}\""));
+    apply_install(&mut root, &format!("\"{beacon}\""));
     // Usage self-production via statusline wrap — fail-soft: never let it block session tracking.
     if let Some(wrap) = statusline_wrap_path() {
-        if let Err(e) = apply_statusline_install(&mut root, &wrap, &exe) {
+        if let Err(e) = apply_statusline_install(&mut root, &wrap, &beacon) {
             eprintln!("[clowder] statusline wrap skipped: {e}");
         }
     }
@@ -322,7 +388,9 @@ pub fn beacon_uninstall() -> Result<(), String> {
     if let Some(wrap) = statusline_wrap_path() {
         apply_statusline_uninstall(&mut root, &wrap);
     }
-    save(&path, &root)
+    save(&path, &root)?;
+    remove_beacon_binary(); // tidy: drop the staged copy now that nothing references it
+    Ok(())
 }
 
 #[cfg(test)]
@@ -475,6 +543,31 @@ mod tests {
         apply_statusline_install(&mut root, &wrap, "D:/y/clowder.exe").unwrap(); // wrap again
         let orig = read_wrap_original(&wrap).unwrap();
         assert_eq!(orig["command"], "original-line", "must not wrap our own wrapper");
+    }
+
+    // ---- beacon binary staging ----
+
+    #[test]
+    fn stage_binary_copies_to_stable_path() {
+        let dir = std::env::temp_dir().join("clowder-test-bin-copy");
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = std::env::temp_dir().join("clowder-test-srcexe-1");
+        std::fs::write(&src, b"FAKEEXE-v1").unwrap();
+        let p = stage_binary(&src, &dir).unwrap();
+        assert!(p.ends_with("/clowder.exe"), "returns forward-slashed stable path, got {p}");
+        assert_eq!(std::fs::read(dir.join("clowder.exe")).unwrap(), b"FAKEEXE-v1");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_file(&src);
+    }
+
+    #[test]
+    fn should_restage_true_when_dst_missing() {
+        let src = std::env::temp_dir().join("clowder-test-srcexe-2");
+        std::fs::write(&src, b"x").unwrap();
+        let missing = std::env::temp_dir().join("clowder-test-bin-missing").join("clowder.exe");
+        let _ = std::fs::remove_file(&missing);
+        assert!(should_restage(&missing, &src), "a missing staged copy must restage");
+        let _ = std::fs::remove_file(&src);
     }
 
     #[test]

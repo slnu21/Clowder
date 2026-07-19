@@ -58,8 +58,12 @@ pub fn run() {
             beacon_install::beacon_uninstall,
         ])
         .setup(|app| {
-            // The session board watches Vigil's beacon spool on a background thread and pushes
-            // updates to the frontend. It needs the AppHandle to emit, so it starts here.
+            // If session tracking is installed, refresh the staged beacon binary so an app update
+            // propagates without a reinstall. Off-thread: never block startup on a file copy.
+            std::thread::spawn(beacon_install::refresh_beacon_binary_on_startup);
+
+            // The session board watches the beacon spool on a background thread and pushes updates to
+            // the frontend. It needs the AppHandle to emit, so it starts here.
             use tauri::Manager;
             let handle = app.handle().clone();
             app.manage(sessions::start(handle));
