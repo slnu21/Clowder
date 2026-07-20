@@ -45,6 +45,31 @@
   --ui: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
 
+  /*
+   * Terminal ANSI palette. xterm.js ships one palette designed for a black background; with only
+   * background/foreground overridden it stayed in force, which is why light mode was unreadable —
+   * PSReadLine paints the command you are typing in bright yellow (`ESC[93m`), and xterm's default
+   * bright yellow is near-white. These sixteen ride the same warm-neutral ramp as the rest of the app
+   * and reuse the semantic hues (`--danger`/`--ok`/`--warn`/`--info`) so a red in the terminal is the
+   * same red as a red in the rail. Read by `xtermTheme()` and re-applied live by `retheme()`.
+   */
+  --ansi-black: #3a3733; /* not #000 — a true black is invisible against --bg-inset */
+  --ansi-red: #cf6b6b;
+  --ansi-green: #8faa6e;
+  --ansi-yellow: #d99a4e;
+  --ansi-blue: #7f9cc0;
+  --ansi-magenta: #b98bbd;
+  --ansi-cyan: #7fa8a0;
+  --ansi-white: #cfccc5;
+  --ansi-bright-black: #6d6a63;
+  --ansi-bright-red: #e08c8c;
+  --ansi-bright-green: #a8c489;
+  --ansi-bright-yellow: #edb96a;
+  --ansi-bright-blue: #9bb8d6;
+  --ansi-bright-magenta: #d0a6d3;
+  --ansi-bright-cyan: #9dc2ba;
+  --ansi-bright-white: #f2f0eb;
+
   color-scheme: dark;
 }
 
@@ -83,6 +108,30 @@
   --st-dead: #c4c0b5;
 
   --pop-shadow: 0 16px 40px rgba(60, 55, 45, 0.20);
+
+  /*
+   * Light ANSI. The one rule that matters: **`bright-*` must never be lighter than its base.** On a
+   * dark background "bright" means closer to white; on `--bg-inset: #f3f1ec` that is the same as
+   * invisible. Here bright means *more saturated and a shade darker* — it still reads as emphasis, but
+   * on paper instead of on glass. `bright-yellow` is the one this whole exercise is about: it carries
+   * the PowerShell command line.
+   */
+  --ansi-black: #2b2925;
+  --ansi-red: #a33a3a;
+  --ansi-green: #4f6b34;
+  --ansi-yellow: #8a5d00;
+  --ansi-blue: #2f5d8a;
+  --ansi-magenta: #8a4a86;
+  --ansi-cyan: #2f6b63;
+  --ansi-white: #6a665e; /* the "white" slot has to be a mid grey here, or it vanishes */
+  --ansi-bright-black: #7a766c;
+  --ansi-bright-red: #8f2f2f;
+  --ansi-bright-green: #3f5a28;
+  --ansi-bright-yellow: #6f4a00;
+  --ansi-bright-blue: #24496e;
+  --ansi-bright-magenta: #713a6e;
+  --ansi-bright-cyan: #24564f;
+  --ansi-bright-white: #3a3833;
 
   color-scheme: light;
 }

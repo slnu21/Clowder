@@ -1,5 +1,5 @@
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal as Xterm } from "@xterm/xterm";
+import { Terminal as Xterm, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { ptyClose, ptyResize, ptySpawn, ptyWrite } from "../../lib/tauri";
 import { resolveShell } from "../../lib/settings";
@@ -40,18 +40,45 @@ const ptyToLeaf = new Map<number, string>();
  * accent are active. `--accent`/`--bg-inset` resolve to the theme-tuned hex the CSS already computed,
  * so the cursor tracks the user's accent choice. `retheme()` re-applies these to every open terminal
  * when the theme flips — the shells keep running, only their palette changes.
+ *
+ * The return type is `ITheme`, deliberately: it used to be narrowed to five keys, and a narrowed type
+ * is how the ANSI sixteen went missing for so long — there was no slot to put them in and nothing
+ * complained.
  */
-function xtermTheme(): { background: string; foreground: string; cursor: string; cursorAccent: string; selectionBackground: string } {
+function xtermTheme(): ITheme {
   const rs = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => rs.getPropertyValue(name).trim() || fallback;
   const light = useSettings.getState().settings.theme === "light";
   const bg = v("--bg-inset", light ? "#f3f1ec" : "#0f0f0e");
+  const ansi = (name: string, dark: string, lit: string) => v(`--ansi-${name}`, light ? lit : dark);
   return {
     background: bg,
     foreground: v("--text-1", light ? "#262420" : "#e8e6e1"),
     cursor: v("--accent", "#c8a15c"),
     cursorAccent: bg,
     selectionBackground: light ? "rgba(38,36,32,0.16)" : "rgba(232,230,225,0.16)",
+    // No `selectionForeground` on purpose: leaving it unset keeps selected text in its own colour, so
+    // a highlighted diff or log line still reads as a diff or log line.
+
+    // The sixteen. Fallbacks matter — `getComputedStyle` returns "" for a property the stylesheet
+    // hasn't defined yet during the very first paint, and an empty string would put xterm back on its
+    // black-background defaults, which is the bug being fixed.
+    black: ansi("black", "#3a3733", "#2b2925"),
+    red: ansi("red", "#cf6b6b", "#a33a3a"),
+    green: ansi("green", "#8faa6e", "#4f6b34"),
+    yellow: ansi("yellow", "#d99a4e", "#8a5d00"),
+    blue: ansi("blue", "#7f9cc0", "#2f5d8a"),
+    magenta: ansi("magenta", "#b98bbd", "#8a4a86"),
+    cyan: ansi("cyan", "#7fa8a0", "#2f6b63"),
+    white: ansi("white", "#cfccc5", "#6a665e"),
+    brightBlack: ansi("bright-black", "#6d6a63", "#7a766c"),
+    brightRed: ansi("bright-red", "#e08c8c", "#8f2f2f"),
+    brightGreen: ansi("bright-green", "#a8c489", "#3f5a28"),
+    brightYellow: ansi("bright-yellow", "#edb96a", "#6f4a00"),
+    brightBlue: ansi("bright-blue", "#9bb8d6", "#24496e"),
+    brightMagenta: ansi("bright-magenta", "#d0a6d3", "#713a6e"),
+    brightCyan: ansi("bright-cyan", "#9dc2ba", "#24564f"),
+    brightWhite: ansi("bright-white", "#f2f0eb", "#3a3833"),
   };
 }
 
