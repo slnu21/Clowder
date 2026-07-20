@@ -36,6 +36,11 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Clipboard goes through Rust rather than `navigator.clipboard`: the webview API needs a
+        // secure context *and* live user activation, and inside WebView2 it fails with a bare
+        // NotAllowedError whenever either is missing. A copy that silently doesn't copy is worse
+        // than no copy button at all.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
             default_shell,

@@ -1,6 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { copyText, pasteText } from "../../lib/clipboard";
 import { ptyClose, ptyResize, ptySpawn, ptyWrite } from "../../lib/tauri";
 import { resolveShell } from "../../lib/settings";
 import { useSettings } from "../settings/store";
@@ -88,6 +89,37 @@ export function retheme(): void {
   for (const entry of pool.values()) entry.term.options.theme = theme;
 }
 
+/**
+ * Copy/paste bindings, following the Windows Terminal convention.
+ *
+ * `Ctrl+C` is the interesting one: it has to stay `^C` — interrupting a runaway command is the single
+ * most important key in a terminal — but when there *is* a selection, nobody means "interrupt". So it
+ * copies only in that case, exactly when `^C` would have had nothing to interrupt anyway.
+ *
+ * `Ctrl+V` is deliberately left alone: PSReadLine and readline both handle it themselves, and
+ * intercepting it would break paste inside their line editors. `Ctrl+Shift+V` is ours.
+ *
+ * Returning `false` tells xterm to swallow the event instead of sending it to the shell.
+ */
+function clipboardKeys(term: Xterm): (e: KeyboardEvent) => boolean {
+  return (e) => {
+    if (e.type !== "keydown" || !e.ctrlKey || e.altKey) return true;
+    const key = e.key.toLowerCase();
+    if (key === "c" && (e.shiftKey || term.hasSelection())) {
+      void copyText(term.getSelection());
+      return false;
+    }
+    if (key === "v" && e.shiftKey) {
+      // `term.paste` and not `ptyWrite`: it wraps the text in bracketed-paste markers when the app
+      // asked for them, which is how a multi-line paste lands as one block instead of running every
+      // line as a separate command.
+      void pasteText().then((t) => t && term.paste(t));
+      return false;
+    }
+    return true;
+  };
+}
+
 export function acquire(leafId: string, cwd?: string): PoolEntry {
   const existing = pool.get(leafId);
   if (existing) return existing;
@@ -104,6 +136,7 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
+  term.attachCustomKeyEventHandler(clipboardKeys(term));
   term.open(el);
 
   const entry: PoolEntry = { term, fit, el, ptyId: null, released: false };
@@ -155,4 +188,21 @@ export function writeToPane(leafId: string, data: string): void {
 
 export function focusPane(leafId: string): void {
   pool.get(leafId)?.term.focus();
+}
+
+/**
+ * Right-click in a terminal: copy if something is selected, otherwise paste — the Windows Terminal
+ * behaviour, and the reason a terminal doesn't need a context menu at all. Lives here rather than in
+ * `TileTree` so every piece of xterm knowledge stays in one file.
+ */
+export async function copyOrPaste(leafId: string): Promise<void> {
+  const term = pool.get(leafId)?.term;
+  if (!term) return;
+  if (term.hasSelection()) {
+    await copyText(term.getSelection());
+    term.clearSelection(); // feedback: the highlight going away is what says "copied"
+    return;
+  }
+  const text = await pasteText();
+  if (text) term.paste(text);
 }

@@ -2,7 +2,7 @@ import { Allotment } from "allotment";
 import "allotment/dist/style.css";
 import Icon from "../../components/Icon";
 import TerminalView from "../terminal/TerminalView";
-import { writeToPane } from "../terminal/terminalPool";
+import { copyOrPaste, writeToPane } from "../terminal/terminalPool";
 import HtmlViewer from "../viewer/HtmlViewer";
 import MdViewer from "../viewer/MdViewer";
 import { Leaf, Node } from "./model";
@@ -66,7 +66,19 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
           </button>
         </span>
       </div>
-      <div className="tile-body">
+      <div
+        className="tile-body"
+        // Terminals only: the viewers deliberately suppress their own context menu, and a menu-less
+        // right-click that pastes into a document would be a surprise.
+        onContextMenu={
+          leaf.content === "terminal"
+            ? (e) => {
+                e.preventDefault();
+                void copyOrPaste(leaf.id);
+              }
+            : undefined
+        }
+      >
         {leaf.content === "terminal" ? (
           <TerminalView leafId={leaf.id} cwd={leaf.cwd} />
         ) : leaf.content === "md" && leaf.path ? (
