@@ -60,7 +60,7 @@ pub fn run() {
             settings::get_settings,
             settings::save_settings,
             settings::resolve_shell_cmd,
-            beacon_install::beacon_installed,
+            beacon_install::beacon_status,
             beacon_install::beacon_install,
             beacon_install::beacon_uninstall,
         ])

@@ -6,12 +6,14 @@
 //! and writes Clowder's **own** spool under `%LOCALAPPDATA%\Clowder\{sessions,usage,subagents}` — so the
 //! rail works without Vigil installed.
 //!
-//! Invariants (same as Vigil): writes NOTHING to stdout/stderr and never panics. SessionStart/
+//! Invariants (same as Vigil): **hook** runs write NOTHING to stdout/stderr and never panic. SessionStart/
 //! UserPromptSubmit stdout is injected into the model, and Stop stdout can force Claude to keep working.
+//! `--statusline` is the one deliberate exception: there stdout *is* the status line Claude Code renders,
+//! so it passes the user's original line (or our summary) through — see `delegate_statusline`.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use windows::Win32::Foundation::{CloseHandle, FILETIME};
@@ -61,6 +63,18 @@ struct StatuslineInput {
     session_id: Option<String>,
     context_window: Option<SlContext>,
     rate_limits: Option<SlRateLimits>,
+    // Only read for the summary line we draw for users who had no statusline of their own.
+    model: Option<SlModel>,
+    workspace: Option<SlWorkspace>,
+    cwd: Option<String>,
+}
+#[derive(Deserialize, Default)]
+struct SlModel {
+    display_name: Option<String>,
+}
+#[derive(Deserialize, Default)]
+struct SlWorkspace {
+    current_dir: Option<String>,
 }
 #[derive(Deserialize, Default)]
 struct SlContext {
@@ -201,7 +215,86 @@ pub fn run(args: &[String]) {
 
 fn run_statusline() {
     let raw = read_stdin();
-    let Some(input) = parse_json::<StatuslineInput>(&raw) else { return };
+    write_usage(&raw);
+    delegate_statusline(&raw);
+}
+
+/// Render whatever the user is owed on stdout. Claude Code shows *our* stdout as the status line, so this
+/// is the whole contract: their original line if they had one, our summary if they asked for it, and
+/// otherwise nothing at all — a user who never had a status line does not get handed one because they
+/// turned on session tracking.
+fn delegate_statusline(raw: &[u8]) {
+    // No sidecar → we're being run by hand or by a half-removed install. Stay silent rather than invent.
+    let Some((original, mode)) = crate::beacon_install::statusline_state() else { return };
+    let original_cmd = original
+        .as_ref()
+        .and_then(|v| v.get("command"))
+        .and_then(|c| c.as_str())
+        .filter(|s| !s.is_empty());
+    match original_cmd {
+        Some(cmd) => run_original(cmd, raw),
+        None if mode == "clowder" => print_summary(raw),
+        None => {}
+    }
+}
+
+/// Run the user's original statusLine command with the same payload and let its stdout through.
+///
+/// Shell choice mirrors Claude Code's own rule (Git Bash when present, PowerShell otherwise) because the
+/// command was written for whatever Claude Code would have used. `pty::default_shell()` already resolves
+/// exactly that pair. Failures are silent by design: a broken original renders blank, which is precisely
+/// what it did before we stood in front of it.
+fn run_original(cmd: &str, raw: &[u8]) {
+    let shell = crate::pty::default_shell();
+    let args: Vec<&str> = if shell.to_lowercase().ends_with("bash.exe") {
+        vec!["-c", cmd]
+    } else {
+        vec!["-NoProfile", "-Command", cmd]
+    };
+    let Ok(mut child) = std::process::Command::new(&shell)
+        .args(&args)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    else {
+        return;
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(raw);
+    } // dropped here: the child sees EOF, which `$(cat)` needs
+    let _ = child.wait();
+}
+
+/// Clowder's own one-line status: folder, model, context %, 5h budget. Only for users who had no status
+/// line and chose to be given one.
+fn print_summary(raw: &[u8]) {
+    let Some(input) = parse_json::<StatuslineInput>(raw) else { return };
+    let mut parts: Vec<String> = Vec::new();
+    let dir = input
+        .workspace
+        .and_then(|w| w.current_dir)
+        .or(input.cwd)
+        .and_then(|c| {
+            std::path::Path::new(&c).file_name().map(|f| f.to_string_lossy().into_owned())
+        });
+    if let Some(d) = dir.filter(|d| !d.is_empty()) {
+        parts.push(d);
+    }
+    if let Some(m) = input.model.and_then(|m| m.display_name).filter(|m| !m.is_empty()) {
+        parts.push(m);
+    }
+    if let Some(p) = input.context_window.as_ref().and_then(|c| c.used_percentage) {
+        parts.push(format!("ctx:{}%", p.round() as i64));
+    }
+    if let Some(p) = input.rate_limits.as_ref().and_then(|r| r.five_hour.as_ref()).and_then(|w| w.used_percentage) {
+        parts.push(format!("5h:{}%", p.round() as i64));
+    }
+    if !parts.is_empty() {
+        println!("{}", parts.join(" | "));
+    }
+}
+
+fn write_usage(raw: &[u8]) {
+    let Some(input) = parse_json::<StatuslineInput>(raw) else { return };
 
     let context = input.context_window.map(|c| UsageContextOut {
         used_percentage: c.used_percentage,
@@ -484,7 +577,7 @@ fn now_iso() -> String {
     unix_to_iso(SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0))
 }
 
-fn unix_to_iso(secs: i64) -> String {
+pub fn unix_to_iso(secs: i64) -> String {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
     let (h, mi, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);

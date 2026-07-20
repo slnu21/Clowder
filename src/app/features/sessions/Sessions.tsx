@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
-import { beaconInstall, beaconInstalled, beaconUninstall } from "../../lib/beacon";
+import { beaconInstall, beaconStatus, beaconUninstall } from "../../lib/beacon";
+import type { BeaconStatus, StatuslineMode } from "../../lib/beacon";
 import { leafIdForPty } from "../terminal/terminalPool";
 import { useWorkspace } from "../workspace/store";
 import {
@@ -47,41 +48,50 @@ export default function Sessions() {
     return () => clearInterval(id);
   }, []);
 
-  // Are Clowder's session-tracking hooks installed? `null` while loading (don't flash the prompt).
-  const [installed, setInstalled] = useState<boolean | null>(null);
+  // Tracking state. `null` while loading (don't flash the prompt). Two halves — hooks and statusline —
+  // because usage only ever arrives through the second one.
+  const [status, setStatus] = useState<BeaconStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const refresh = () => beaconStatus().then(setStatus).catch(() => {});
+  // Refetch on focus, not just on mount: settings.json is edited outside this app all the time (by the
+  // user, by an uninstall, by another tool) and a stale "installed" is the thing we're fixing.
   useEffect(() => {
-    let cancelled = false;
-    beaconInstalled()
-      .then((v) => !cancelled && setInstalled(v))
-      .catch(() => !cancelled && setInstalled(null));
-    return () => {
-      cancelled = true;
-    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, []);
 
-  const install = async () => {
+  const install = async (mode?: StatuslineMode) => {
     setBusy(true);
+    setAsking(false);
     try {
-      await beaconInstall();
-      setInstalled(true);
+      await beaconInstall(mode);
+      await refresh();
     } catch {
       /* fail-soft */
     } finally {
       setBusy(false);
     }
   };
+  // Only a user with no statusline of their own gets a choice — wrapping an existing one is invisible
+  // to them, so asking would be noise.
+  const startInstall = () => (status?.userStatusline ? install() : setAsking(true));
   const uninstall = async () => {
     setBusy(true);
     try {
       await beaconUninstall();
-      setInstalled(false);
+      await refresh();
     } catch {
       /* fail-soft */
     } finally {
       setBusy(false);
     }
   };
+
+  const off = status !== null && !status.hooks;
+  // Hooks landed but usage can't arrive — the exact state the old single boolean reported as "installed".
+  const partial = status !== null && status.hooks && !status.statusline;
 
   const sessions = snap?.sessions ?? [];
   const waiting = snap?.waitingCount ?? 0;
@@ -94,16 +104,42 @@ export default function Sessions() {
       </div>
 
       <div className="session-list">
-        {installed === false ? (
+        {asking ? (
+          <div className="track-prompt">
+            <div className="track-title">상태줄을 쓸까요?</div>
+            <p className="track-desc">
+              사용량(컨텍스트·5시간·7일)은 Claude Code 상태줄로 들어옵니다. 지금 쓰는 상태줄이 없어서,
+              Clowder가 상태줄에 무엇을 그릴지 고를 수 있어요. 나중에 끄면 상태줄 설정은 원래대로
+              (없던 상태로) 돌아갑니다.
+            </p>
+            <button className="track-btn" onClick={() => install("none")} disabled={busy}>
+              사용량만 수집 (상태줄 비움)
+            </button>
+            <button className="track-btn track-btn-alt" onClick={() => install("clowder")} disabled={busy}>
+              Clowder 상태줄 쓰기 (폴더·모델·ctx·5h)
+            </button>
+          </div>
+        ) : off ? (
           <div className="track-prompt">
             <div className="track-title">세션 추적이 꺼져 있어요</div>
             <p className="track-desc">
               설치하면 실행 중인 Claude Code 세션·상태와 사용량(컨텍스트·5시간·7일)이 여기 표시됩니다.
-              Claude Code 훅을 추가하고 상태줄(statusline)을 감싸 사용량을 읽습니다. 기존 상태줄과 설정은
+              Claude Code 훅을 추가하고 상태줄(statusline)로 사용량을 읽습니다. 기존 상태줄과 설정은
               백업·보존해, 끄면 원래대로 되돌립니다.
             </p>
-            <button className="track-btn" onClick={install} disabled={busy}>
+            <button className="track-btn" onClick={startInstall} disabled={busy}>
               {busy ? "설치 중…" : "세션 추적 설치"}
+            </button>
+          </div>
+        ) : partial ? (
+          <div className="track-prompt track-warn">
+            <div className="track-title">사용량 수집이 끊겨 있어요</div>
+            <p className="track-desc">
+              세션 훅은 설치돼 있지만 상태줄이 Clowder에 연결돼 있지 않습니다 — 세션 목록은 뜨고
+              사용량(컨텍스트·5시간·7일)만 비어 있는 상태예요. 다시 설치하면 상태줄만 연결합니다.
+            </p>
+            <button className="track-btn" onClick={startInstall} disabled={busy}>
+              {busy ? "설치 중…" : "다시 설치"}
             </button>
           </div>
         ) : sessions.length === 0 ? (
@@ -115,7 +151,7 @@ export default function Sessions() {
 
       {snap && <UsageFooter usage={snap.usage} />}
 
-      {installed && (
+      {status?.hooks && (
         <button
           className="track-off"
           onClick={uninstall}
