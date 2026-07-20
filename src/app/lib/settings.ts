@@ -13,7 +13,19 @@ export type Settings = {
   theme: "dark" | "light";
   /** Accent key: amber | sage | clay | neutral. Applied as `data-accent`; everything derives from --accent. */
   accent: string;
+  /** Chrome scale, 0.9–1.5. Multiplies every size token; the terminal is a separate axis. */
+  uiScale: number;
+  /** Is the left panel (explorer/workspace) shown? */
+  leftPanel: boolean;
+  /**
+   * Right session rail. `null` means **never chosen** — resolved at runtime to "full" when session
+   * tracking is installed and "hidden" when it isn't, so a user who doesn't track Claude Code sessions
+   * never sees a rail they have no use for. Touching the toggle makes it an explicit choice.
+   */
+  rightRail: RailMode | null;
 };
+
+export type RailMode = "full" | "mini" | "hidden";
 
 export const DEFAULT_SETTINGS: Settings = {
   gitBashPath: null,
@@ -25,6 +37,9 @@ export const DEFAULT_SETTINGS: Settings = {
   favorites: [],
   theme: "dark",
   accent: "amber",
+  uiScale: 1,
+  leftPanel: true,
+  rightRail: null,
 };
 
 export const getSettings = () => invoke<Settings>("get_settings");

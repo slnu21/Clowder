@@ -12,6 +12,36 @@
  * accent for contrast. Palette is warm-neutral deep grey — deliberately low-blue.
  */
 :root {
+  /* UI scale. Declared in CSS — not only written by JS — so every `calc()` below still resolves if the
+     settings store never runs. `zoom` was rejected: the settings popover reads a zoomed
+     `getBoundingClientRect()` and portals into an unzoomed body, and the explorer menu uses raw
+     `clientX/Y`; both misplace immediately, and the terminal would be scaled twice. This is the size
+     twin of `--accent`/`data-theme`, and it leaves the terminal alone by construction
+     (`terminalFontSize` is a separate axis). */
+  --ui-scale: 1;
+
+  /* Type ramp — every font-size in the app resolves to one of these. The old 0.5px rungs (10.5/11.5/
+     12.5) were accidental drift and render inconsistently at fractional DPR; they round **down** so the
+     hierarchy never inverts. */
+  --fs-3xs: calc(9px * var(--ui-scale));
+  --fs-2xs: calc(10px * var(--ui-scale));
+  --fs-xs: calc(11px * var(--ui-scale));
+  --fs-sm: calc(12px * var(--ui-scale));
+  --fs-md: calc(13px * var(--ui-scale));
+  --fs-lg: calc(28px * var(--ui-scale));
+
+  /* Fixed box heights must scale with the text they hold — at 1.3 a 24px row clips 16.9px glyphs. */
+  --h-bar: calc(34px * var(--ui-scale));   /* titlebar, pane-title, side-tabs, tabstrip */
+  --h-tab: calc(30px * var(--ui-scale));   /* side-tab */
+  --h-row: calc(24px * var(--ui-scale));   /* .row, .tile-head */
+
+  /* Shell geometry. Declared here (not only in JS) so the layout is correct before the settings store
+     has run, and so the toggles only ever override a variable that already exists. Panel widths scale
+     too: someone who enlarged the UI wants the panel that text lives in to fit it. */
+  --w-left: calc(248px * var(--ui-scale));
+  --w-right: calc(272px * var(--ui-scale));
+  --w-rail-mini: calc(40px * var(--ui-scale));
+
   --bg-inset: #0f0f0e;   /* terminal — deepest, recedes */
   --bg-base: #171614;    /* app canvas */
   --bg-raised: #1f1e1b;  /* side/rail/tabstrip panels */
@@ -39,6 +69,18 @@
   --st-working: #8faa6e;     /* 동작 중 */
   --st-idle: #6d6a63;        /* 유휴 */
   --st-dead: #4a4842;        /* 종료됨 */
+
+  /* Pane tints — muted on purpose. These sit inside a warm-neutral app, and eight saturated hues would
+     turn a tiled workspace into a paint chart. They only ever appear as a 3px edge unless the user
+     deliberately picks one. */
+  --tint-1: #b98a5a;
+  --tint-2: #7f9cc0;
+  --tint-3: #8faa6e;
+  --tint-4: #b98bbd;
+  --tint-5: #7fa8a0;
+  --tint-6: #cf8f7a;
+  --tint-7: #a9a06a;
+  --tint-8: #9a93c0;
 
   --pop-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
 
@@ -107,6 +149,16 @@
   --st-idle: #8a867c;
   --st-dead: #c4c0b5;
 
+  /* Tints, darkened for paper: the dark-mode values wash out against a light panel. */
+  --tint-1: #8a5f2c;
+  --tint-2: #2f5d8a;
+  --tint-3: #4f6b34;
+  --tint-4: #7a4a7d;
+  --tint-5: #2f6b63;
+  --tint-6: #9c5540;
+  --tint-7: #6f6726;
+  --tint-8: #575083;
+
   --pop-shadow: 0 16px 40px rgba(60, 55, 45, 0.20);
 
   /*
@@ -153,7 +205,7 @@ body {
   background: var(--bg-base);
   color: var(--text-1);
   font-family: var(--ui);
-  font-size: 13px;
+  font-size: var(--fs-md);
   overflow: hidden;
 }
 
@@ -195,7 +247,9 @@ button {
 
 .deck {
   display: grid;
-  grid-template-columns: 248px 1fr 272px;
+  /* Widths live in variables so the panel toggles (and the UI scale) can move them without this rule
+     knowing about either. */
+  grid-template-columns: var(--w-left) 1fr var(--w-right);
   /* Pin the row to the container: an auto row grows to its tallest content, and a few hundred tree
      rows would stretch every pane (and the terminal) far past the window. */
   grid-template-rows: minmax(0, 1fr);
@@ -203,12 +257,20 @@ button {
   min-height: 0;
 }
 
+/* Collapsed columns need `display: none` on the pane itself, not just a 0 width — a zero-width pane
+   still paints its 1px border, which reads as a stray line down the window. */
+.deck[data-left="off"] { --w-left: 0px; }
+.deck[data-left="off"] > .explorer { display: none; }
+.deck[data-rail="mini"] { --w-right: var(--w-rail-mini); }
+.deck[data-rail="off"] { --w-right: 0px; }
+.deck[data-rail="off"] > .sessions { display: none; }
+
 /* ── custom title bar (native decorations off) ────────── */
 .titlebar {
   display: flex;
   align-items: center;
   flex: none;
-  height: 34px;
+  height: var(--h-bar);
   padding-left: 12px;
   background: var(--bg-raised);
   border-bottom: 1px solid var(--line-1);
@@ -217,7 +279,7 @@ button {
 
 .titlebar-app { display: flex; align-items: center; gap: 8px; height: 100%; color: var(--text-3); }
 .brandmark { flex: none; display: block; }
-.titlebar-name { color: var(--text-1); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+.titlebar-name { color: var(--text-1); font-size: var(--fs-md); font-weight: 600; letter-spacing: 0.02em; }
 .titlebar-controls { display: flex; margin-left: auto; height: 100%; }
 
 .tb-btn {
@@ -261,11 +323,11 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
+  height: var(--h-bar);
   padding: 0 8px 0 12px;
   border-bottom: 1px solid var(--line-1);
   color: var(--text-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -277,14 +339,14 @@ button {
   place-items: center;
   color: var(--text-3);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* ── left panel: tabbed (explorer / workspace) ────────── */
 .side-tabs {
   display: flex;
   align-items: stretch;
-  height: 34px;
+  height: var(--h-bar);
   border-bottom: 1px solid var(--line-1);
   background: var(--bg-raised);
 }
@@ -298,7 +360,7 @@ button {
   border-bottom: 2px solid transparent;
   background: none;
   color: var(--text-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition: color 0.12s ease, background-color 0.12s ease;
 }
 
@@ -311,7 +373,7 @@ button {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 30px;
+  height: var(--h-tab);
   padding: 0 8px;
   border-bottom: 1px solid var(--line-1);
 }
@@ -321,7 +383,7 @@ button {
   place-items: center;
   flex: none;
   width: 24px;
-  height: 24px;
+  height: var(--h-row);
   border: 0;
   border-radius: 5px;
   background: none;
@@ -335,7 +397,7 @@ button {
   min-width: 0;
   color: var(--text-2);
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -356,7 +418,7 @@ button {
 
 .tree-label {
   padding: 8px 12px 3px;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -367,7 +429,7 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
+  height: var(--h-row);
   padding-right: 8px;
   white-space: nowrap;
   color: var(--text-1);
@@ -393,11 +455,15 @@ button {
   flex: none;
   display: inline-block;
   vertical-align: middle;
+  /* One rule scales every icon: `Icon.tsx` passes its per-call size as `--icon-size`, and a CSS width
+     beats the SVG `width` attribute. The fallback keeps icons sane if the style prop ever goes missing. */
+  width: calc(var(--icon-size, 15) * 1px * var(--ui-scale));
+  height: calc(var(--icon-size, 15) * 1px * var(--ui-scale));
 }
 
 .name {
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--fs-md);
   text-overflow: ellipsis;
 }
 
@@ -437,7 +503,7 @@ button {
   display: grid;
   place-items: center;
   width: 24px;
-  height: 24px;
+  height: var(--h-row);
   padding: 0;
   border: 1px solid transparent;
   border-radius: 5px;
@@ -467,7 +533,7 @@ button {
 
 .set-group {
   margin: 12px 0 6px;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -482,7 +548,7 @@ button {
   justify-content: space-between;
   gap: 10px;
   margin: 7px 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .set-row.set-col { flex-direction: column; align-items: stretch; gap: 4px; }
@@ -497,7 +563,7 @@ button {
   background: var(--bg-base);
   color: var(--text-1);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .set-row input[type="number"] { width: 72px; text-align: right; font-family: var(--mono); }
@@ -514,7 +580,7 @@ button {
   background: var(--bg-base);
   color: var(--text-2);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 .set-pathpick button:hover,
@@ -529,7 +595,7 @@ button {
   background: var(--bg-base);
   color: var(--text-2);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .set-seg button + button { border-left: 1px solid var(--line-2); }
 .set-seg button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
@@ -538,8 +604,8 @@ button {
 .set-accent { display: flex; gap: 8px; }
 
 .set-accent button {
-  width: 22px;
-  height: 22px;
+  width: calc(22px * var(--ui-scale));
+  height: calc(22px * var(--ui-scale));
   padding: 0;
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 50%;
@@ -548,7 +614,7 @@ button {
 .set-accent button.on { outline: 2px solid var(--text-2); outline-offset: 2px; }
 
 .set-favs { display: flex; flex-direction: column; gap: 3px; }
-.set-fav { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.set-fav { display: flex; align-items: center; gap: 4px; font-size: var(--fs-xs); }
 
 .set-fav-path {
   flex: 1;
@@ -564,8 +630,8 @@ button {
   display: grid;
   place-items: center;
   flex: none;
-  width: 20px;
-  height: 20px;
+  width: calc(20px * var(--ui-scale));
+  height: calc(20px * var(--ui-scale));
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -580,7 +646,7 @@ button {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--line-1);
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   line-height: 1.5;
   color: var(--text-3);
 }
@@ -592,16 +658,99 @@ button {
   border-radius: 999px;
   background: var(--st-permission);
   color: #fff;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
 }
 
 .session-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 7px; }
 
+/* ── mini session rail (40px) ─────────────────────────── */
+.sessions-mini {
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  overflow: hidden;
+}
+.mini-waiting {
+  flex: none;
+  min-width: calc(18px * var(--ui-scale));
+  padding: 1px 4px;
+  border-radius: 9px;
+  background: var(--st-permission);
+  color: var(--bg-base);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-align: center;
+}
+.mini-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.mini-session {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  max-height: 190px;
+  padding: 6px 0;
+  border-left: 3px solid var(--st-idle);
+  border-radius: 0 6px 6px 0;
+  background: var(--bg-overlay);
+  cursor: default;
+}
+.mini-session.linked { cursor: pointer; }
+.mini-session:hover { background: var(--hover); }
+.mini-session.awaiting_permission { border-left-color: var(--st-permission); }
+.mini-session.awaiting_input { border-left-color: var(--st-input); }
+.mini-session.working { border-left-color: var(--st-working); }
+.mini-session.dead { border-left-color: var(--st-dead); }
+.mini-name {
+  /* Vertical text with `mixed` orientation: Hangul stays upright, Latin rotates as a word. `upright`
+     would stack Latin one letter per line and swallow the rail. */
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  max-height: 100%;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mini-usage {
+  display: flex;
+  flex: none;
+  gap: 5px;
+  justify-content: center;
+  padding-top: 4px;
+  border-top: 1px solid var(--line-1);
+}
+.mini-meter { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.mini-meter-track {
+  display: flex;
+  align-items: flex-end;         /* meters fill from the bottom, like a tank */
+  width: 5px;
+  height: 44px;
+  border-radius: 3px;
+  background: var(--line-1);
+  overflow: hidden;
+}
+.mini-meter-fill { width: 100%; border-radius: 3px; background: var(--accent); }
+.mini-meter-label { color: var(--text-3); font-size: var(--fs-3xs); }
+
+/* ── title bar panel toggles ──────────────────────────── */
+.titlebar-panels { display: flex; gap: 2px; margin-left: 8px; }
+/* An "on" toggle is only slightly brighter — this is chrome, not a call to action. */
+.titlebar-panels .tb-btn[data-on] { color: var(--text-2); }
+
 /* session-tracking install prompt / uninstall (right rail) */
 .track-prompt { padding: 12px 10px; }
-.track-title { margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--text-1); }
-.track-desc { margin: 0 0 12px; font-size: 11.5px; line-height: 1.55; color: var(--text-3); }
+.track-title { margin-bottom: 6px; font-size: var(--fs-md); font-weight: 600; color: var(--text-1); }
+.track-desc { margin: 0 0 12px; font-size: var(--fs-xs); line-height: 1.55; color: var(--text-3); }
 .track-btn {
   width: 100%;
   padding: 8px 12px;
@@ -610,7 +759,7 @@ button {
   background: var(--accent-soft);
   color: var(--text-1);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 .track-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 26%, transparent); }
@@ -634,7 +783,7 @@ button {
   background: none;
   color: var(--text-3);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .track-off:hover:not(:disabled) { background: var(--hover); color: var(--text-2); }
 
@@ -681,7 +830,7 @@ button {
   flex: 1;
   overflow: hidden;
   color: var(--text-1);
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 500;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -693,11 +842,11 @@ button {
   flex: none;
   color: var(--text-3);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 
-.session-meta { margin: 4px 0 0 16px; color: var(--text-2); font-size: 11.5px; }
+.session-meta { margin: 4px 0 0 16px; color: var(--text-2); font-size: var(--fs-xs); }
 .session-tool,
 .session-ctx { margin-left: 3px; color: var(--text-3); }
 
@@ -708,7 +857,7 @@ button {
   align-items: center;
   gap: 6px;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.7;
 }
 
@@ -717,7 +866,7 @@ button {
 .subagent-desc { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-3); }
 
 .usage-footer { padding: 10px 12px; border-top: 1px solid var(--line-1); display: flex; flex-direction: column; gap: 7px; }
-.usage-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.usage-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); }
 .usage-label { flex: none; width: 34px; color: var(--text-3); }
 .usage-track { flex: 1; height: 5px; border-radius: 3px; background: var(--line-1); overflow: hidden; }
 .usage-fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
@@ -727,7 +876,7 @@ button {
 .tabstrip {
   display: flex;
   align-items: stretch;
-  height: 34px;
+  height: var(--h-bar);
   border-bottom: 1px solid var(--line-1);
   background: var(--bg-raised);
   overflow-x: auto;
@@ -753,15 +902,15 @@ button {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-.tab-title { overflow: hidden; font-size: 12px; text-overflow: ellipsis; }
+.tab-title { overflow: hidden; font-size: var(--fs-sm); text-overflow: ellipsis; }
 
 .tab-close,
 .tab-new {
   display: grid;
   place-items: center;
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: calc(18px * var(--ui-scale));
+  height: calc(18px * var(--ui-scale));
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -796,7 +945,7 @@ button {
   align-items: center;
   gap: 10px;
   font-family: var(--mono);
-  font-size: 28px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-1);
@@ -804,7 +953,7 @@ button {
 
 .welcome-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
 
-.welcome-hint { margin: 0; color: var(--text-3); font-size: 13px; }
+.welcome-hint { margin: 0; color: var(--text-3); font-size: var(--fs-md); }
 
 .welcome-actions { display: flex; gap: 10px; margin-top: 4px; }
 
@@ -818,7 +967,7 @@ button {
   background: var(--bg-raised);
   color: var(--text-1);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-md);
 }
 
 .welcome-actions button:hover { background: var(--hover); border-color: var(--accent); }
@@ -827,7 +976,7 @@ button {
 
 .welcome-favs-label {
   padding: 0 6px 4px;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -849,7 +998,7 @@ button {
 
 .welcome-fav:hover { background: var(--bg-raised); border-color: var(--line-1); }
 .welcome-fav .icon.folder { color: var(--accent); }
-.welcome-fav-name { flex: none; font-size: 13px; }
+.welcome-fav-name { flex: none; font-size: var(--fs-md); }
 .welcome-fav-path {
   flex: 1;
   min-width: 0;
@@ -858,7 +1007,7 @@ button {
   text-overflow: ellipsis;
   color: var(--text-3);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   direction: rtl;
   text-align: right;
 }
@@ -872,19 +1021,88 @@ button {
 }
 
 .tile.active { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+/* A tinted pane borrows its own colour for the active border instead of the accent — the pane you're
+   typing in and the pane you're looking for are then the same signal. */
+.tile[data-tint].active { border-color: color-mix(in srgb, var(--tint) 55%, transparent); }
 
 .tile-head {
   display: flex;
   align-items: center;
-  height: 24px;
+  height: var(--h-row);
   padding: 0 4px 0 11px;
   background: var(--bg-raised);
   color: var(--text-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
+
+/* Automatic colour is an edge and nothing more: a tiled screen shouldn't look like a paint chart.
+   The fill is reserved for a colour the user actually chose. */
+.tile[data-tint] .tile-head {
+  padding-left: 8px;
+  border-left: 3px solid var(--tint);
+}
+.tile[data-tint-fill] .tile-head { background: color-mix(in srgb, var(--tint) 12%, var(--bg-raised)); }
+.tile[data-tint-fill] .tile-title { color: var(--text-2); }
 
 .tile.active .tile-head { color: var(--text-2); }
 .tile-title { flex: 1; overflow: hidden; font-family: var(--mono); white-space: nowrap; text-overflow: ellipsis; }
+
+/* Pane colour: the dot in the header, and the palette it opens. */
+.tile-tint-btn {
+  display: grid;
+  place-items: center;
+  width: calc(22px * var(--ui-scale));
+  height: calc(19px * var(--ui-scale));
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.tile-tint-dot {
+  width: calc(9px * var(--ui-scale));
+  height: calc(9px * var(--ui-scale));
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  /* Untinted panes show a hollow dot — the control says "no colour yet" without inventing one. */
+  background: var(--tint, transparent);
+}
+.tile-tint-btn:hover { background: var(--hover); }
+
+.tint-pop {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  background: var(--bg-overlay);
+  box-shadow: var(--pop-shadow);
+}
+.tint-sw {
+  width: calc(18px * var(--ui-scale));
+  height: calc(18px * var(--ui-scale));
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--sw);
+  cursor: pointer;
+}
+.tint-sw.on { border-color: var(--text-1); }
+.tint-clear {
+  grid-column: 1 / -1;
+  padding: 4px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.tint-clear:hover { background: var(--hover); }
 
 /* Actions reveal on hover/active — this opacity is an interaction, not a hierarchy hack. */
 .tile-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s ease; }
@@ -894,8 +1112,8 @@ button {
 .tile-actions button {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 19px;
+  width: calc(22px * var(--ui-scale));
+  height: calc(19px * var(--ui-scale));
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -914,7 +1132,7 @@ button {
 /* ── md / html viewers ────────────────────────────────── */
 .viewer { position: relative; width: 100%; height: 100%; }
 .viewer-frame { width: 100%; height: 100%; border: 0; background: var(--bg-base); }
-.viewer-error { padding: 16px; color: var(--danger); font-family: var(--mono); font-size: 12px; }
+.viewer-error { padding: 16px; color: var(--danger); font-family: var(--mono); font-size: var(--fs-sm); }
 
 .lightbox {
   position: fixed;

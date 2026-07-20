@@ -12,6 +12,9 @@ const ACCENTS = [
   { key: "neutral", label: "뉴트럴", swatch: "#b8b1a4" },
 ] as const;
 
+/** Chrome scale presets. Fixed rungs, not a free field — see the note where they're rendered. */
+const UI_SCALES = [0.9, 1, 1.15, 1.3, 1.5] as const;
+
 /**
  * The whole settings surface: a gear button that opens one popover (no settings window, no SQLite —
  * a single `%APPDATA%\deck\settings.json`, following Vigil's pattern). Harvests md-reader's
@@ -126,6 +129,25 @@ export default function SettingsPopover() {
                   style={{ ["--sw"]: a.swatch } as React.CSSProperties}
                   onClick={() => update({ accent: a.key })}
                 />
+              ))}
+            </div>
+          </div>
+
+          <div className="set-row">
+            <span>UI 크기</span>
+            {/* Presets, not a free number: 1.37 lands no step on a whole pixel and the hinting turns to
+                mush. Chrome only — the terminal keeps its own font size. */}
+            <div className="set-seg">
+              {UI_SCALES.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={s.uiScale === v}
+                  className={s.uiScale === v ? "on" : ""}
+                  onClick={() => update({ uiScale: v })}
+                >
+                  {Math.round(v * 100)}%
+                </button>
               ))}
             </div>
           </div>
@@ -261,7 +283,10 @@ export default function SettingsPopover() {
             </div>
           </div>
 
-          <div className="set-note">셸·글꼴·크기·스크롤백은 새로 여는 터미널부터 적용됩니다.</div>
+          <div className="set-note">
+            UI 크기·테마·액센트는 즉시 적용됩니다. 터미널 글꼴·크기는 별개 설정이고, 셸·스크롤백과 함께
+            새로 여는 터미널부터 반영됩니다.
+          </div>
           </div>,
           document.body,
         )}

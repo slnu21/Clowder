@@ -27,6 +27,17 @@ pub struct Settings {
     /// Accent key: `"amber"` | `"sage"` | `"clay"` | `"neutral"`. The whole UI derives from one
     /// `--accent` token, so this single choice re-tints everything (theme-tuned in CSS).
     pub accent: String,
+    /// Chrome scale, 0.9–1.5. Multiplies every CSS size token; the terminal has its own font size.
+    pub ui_scale: f32,
+    /// Is the left panel (explorer/workspace) shown?
+    pub left_panel: bool,
+    /// Right session rail: `"full"` | `"mini"` | `"hidden"`, or `None` for **never chosen**.
+    ///
+    /// `None` is not the same as `"full"`: it resolves at runtime to `full` when session tracking is
+    /// installed and `hidden` when it isn't, so someone who doesn't use Claude Code session tracking
+    /// never sees a rail they have no use for. Once they touch the toggle it becomes their choice and
+    /// stops tracking the install state.
+    pub right_rail: Option<String>,
 }
 
 impl Default for Settings {
@@ -41,6 +52,9 @@ impl Default for Settings {
             favorites: Vec::new(),
             theme: "dark".into(),
             accent: "amber".into(),
+            ui_scale: 1.0,
+            left_panel: true,
+            right_rail: None,
         }
     }
 }

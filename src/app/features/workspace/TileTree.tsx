@@ -6,6 +6,7 @@ import { copyOrPaste, writeToPane } from "../terminal/terminalPool";
 import HtmlViewer from "../viewer/HtmlViewer";
 import MdViewer from "../viewer/MdViewer";
 import { Leaf, Node } from "./model";
+import TintPicker from "./TintPicker";
 import { useWorkspace } from "./store";
 import { quotePath, ShellKind } from "../../lib/quote";
 
@@ -48,6 +49,10 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
   return (
     <div
       className={"tile" + (active ? " active" : "")}
+      // `--tint` resolves the palette index once, here, so the CSS never has to enumerate eight cases.
+      data-tint={leaf.tint ? String(leaf.tint) : undefined}
+      data-tint-fill={leaf.tintFill ? "1" : undefined}
+      style={leaf.tint ? ({ ["--tint"]: `var(--tint-${leaf.tint})` } as React.CSSProperties) : undefined}
       onMouseDown={() => setActivePane(leaf.id)}
       onDrop={onDrop}
       onDragOver={(e) => e.preventDefault()}
@@ -55,6 +60,7 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
       <div className="tile-head">
         <span className="tile-title">{leaf.title}</span>
         <span className="tile-actions">
+          <TintPicker paneId={leaf.id} tint={leaf.tint} />
           <button title="좌우 분할" onClick={() => splitPane(leaf.id, "row")}>
             <Icon name="split-h" size={13} />
           </button>

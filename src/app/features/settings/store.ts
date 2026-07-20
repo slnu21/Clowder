@@ -16,6 +16,9 @@ function applyAppearance(s: Settings): void {
   const root = document.documentElement;
   root.setAttribute("data-theme", s.theme);
   root.setAttribute("data-accent", s.accent);
+  // Every size token is `calc(Npx * var(--ui-scale))`, so one write resizes the whole chrome. The
+  // terminal is deliberately untouched — its size is `terminalFontSize`, a separate axis.
+  root.style.setProperty("--ui-scale", String(s.uiScale));
 }
 
 type State = {
@@ -41,9 +44,11 @@ export const useSettings = create<State>((set, get) => ({
     const next = { ...prev, ...patch };
     set({ settings: next });
     void saveSettings(next);
-    if (next.theme !== prev.theme || next.accent !== prev.accent) {
+    const themed = next.theme !== prev.theme || next.accent !== prev.accent;
+    if (themed || next.uiScale !== prev.uiScale) {
       applyAppearance(next);
-      retheme(); // live terminals keep running; only their palette flips
+      // Scale alone never touches the terminal palette, so don't pay for a re-theme of every terminal.
+      if (themed) retheme(); // live terminals keep running; only their palette flips
     }
   },
 }));

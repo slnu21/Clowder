@@ -10,8 +10,10 @@ import {
   makeTerminalLeaf,
   makeViewerLeaf,
   nextId,
+  nextTint,
   Node,
   removeLeaf,
+  setLeafProps,
   setSizes,
   splitLeaf,
   Tab,
@@ -46,6 +48,8 @@ type State = {
   newTab: () => void;
   closeTab: (tabId: string) => void;
   splitPane: (paneId: string, dir: Direction) => void;
+  /** Set a pane's colour deliberately; `null` returns it to the automatic (unfilled) state. */
+  setPaneTint: (paneId: string, tint: number | null) => void;
   closePane: (paneId: string) => void;
   updateSizes: (splitId: string, sizes: number[]) => void;
 };
@@ -128,11 +132,29 @@ export const useWorkspace = create<State>((set, get) => ({
     if (!target) return;
     // A split inherits the pane's cwd — splitting a project terminal gives you another in the same dir.
     const leaf = makeTerminalLeaf(target.cwd, shellLabel());
-    const root = splitLeaf(tab.root, paneId, dir, leaf);
+    // Colour arrives the moment a tab stops being a single pane — that's when "which one is which"
+    // starts to cost something, and a lone terminal shouldn't be decorated for nothing. The pane being
+    // split is coloured first so the newcomer's index is computed against it.
+    const seeded = target.tint ? tab.root : setLeafProps(tab.root, paneId, { tint: nextTint(tab.root) });
+    leaf.tint = nextTint(seeded);
+    const root = splitLeaf(seeded, paneId, dir, leaf);
     set({
       tabs: s.tabs.map((t) => (t.id === tab.id ? { ...t, root } : t)),
       activePaneId: leaf.id,
     });
+  },
+
+  setPaneTint: (paneId, tint) => {
+    const s = get();
+    const tab = s.tabs.find((t) => t.id === s.activeTabId);
+    if (!tab) return;
+    // `tintFill` is the record that a human chose this, and that is what earns the filled header.
+    // Clearing goes all the way back to "no colour at all", not to some default colour.
+    const root = setLeafProps(tab.root, paneId, {
+      tint: tint ?? undefined,
+      tintFill: tint != null ? true : undefined,
+    });
+    set({ tabs: s.tabs.map((t) => (t.id === tab.id ? { ...t, root } : t)) });
   },
 
   closePane: (paneId) => {
