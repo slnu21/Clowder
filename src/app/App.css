@@ -1013,11 +1013,35 @@ button {
 }
 
 .tile {
+  position: relative; /* the drop-zone overlay anchors here, not on .tile-body */
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   border: 1px solid transparent;
+}
+
+/* Where the dragged thing would land. `pointer-events: none` is load-bearing: an overlay that takes
+   the pointer steals `dragover` from the tile underneath, and the preview flickers as the two fight. */
+.drop-zone {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+.drop-left { top: 0; bottom: 0; left: 0; width: 50%; }
+.drop-right { top: 0; right: 0; bottom: 0; width: 50%; }
+.drop-top { top: 0; right: 0; left: 0; height: 50%; }
+.drop-bottom { right: 0; bottom: 0; left: 0; height: 50%; }
+/* Centre reads as "this pane", not "this half" — a no-op for a pane drag, the existing insert/retarget
+   behaviour for an explorer drag. */
+.drop-center { inset: 0; }
+
+/* The tab strip lights up while a pane is over its empty space (drop = detach into a new tab). */
+.tabstrip.detach-armed {
+  background: var(--accent-soft);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .tile.active { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }

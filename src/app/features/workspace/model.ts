@@ -131,13 +131,24 @@ export function firstTerminalCwd(node: Node): string | undefined {
  * Replace leaf `targetId` with a split of `[thatLeaf, newLeaf]`. Branches that don't contain the
  * target are rebuilt with the SAME `id`, so React keeps their subtrees (and Allotment its sizes).
  */
-export function splitLeaf(node: Node, targetId: string, dir: Direction, newLeaf: Leaf): Node {
+export function splitLeafAt(
+  node: Node,
+  targetId: string,
+  dir: Direction,
+  newNode: Node,
+  side: "before" | "after",
+): Node {
   if (node.kind === "leaf") {
     if (node.id !== targetId) return node;
-    return { kind: "split", id: nextId("s"), dir, children: [node, newLeaf] };
+    const children = side === "before" ? [newNode, node] : [node, newNode];
+    return { kind: "split", id: nextId("s"), dir, children };
   }
-  return { ...node, children: node.children.map((c) => splitLeaf(c, targetId, dir, newLeaf)) };
+  return { ...node, children: node.children.map((c) => splitLeafAt(c, targetId, dir, newNode, side)) };
 }
+
+/** The original two-argument split — every existing call site keeps working unchanged. */
+export const splitLeaf = (node: Node, targetId: string, dir: Direction, newLeaf: Leaf): Node =>
+  splitLeafAt(node, targetId, dir, newLeaf, "after");
 
 /** Patch one leaf in place (immutably). `undefined` in the patch clears the field. */
 export function setLeafProps(node: Node, targetId: string, patch: Partial<Leaf>): Node {
@@ -159,6 +170,94 @@ export function removeLeaf(node: Node, targetId: string): Node | undefined {
   if (kids.length === 1) return kids[0];
   const removed = kids.length !== node.children.length;
   return { ...node, children: kids, sizes: removed ? undefined : node.sizes };
+}
+
+// ── moving a pane ──────────────────────────────────────────────────────────────────────────────
+
+/** Where inside a pane a drop landed. `center` is deliberately not a move — see `moveLeaf`. */
+export type DropZone = "left" | "right" | "top" | "bottom" | "center";
+
+/** The split that has `childId` as a direct child, if any. */
+function parentSplit(node: Node, childId: string): Split | undefined {
+  if (node.kind === "leaf") return undefined;
+  if (node.children.some((c) => c.id === childId)) return node;
+  for (const c of node.children) {
+    const found = parentSplit(c, childId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Swap one node for another by id, rebuilding only the branch that contains it. */
+function replaceNode(node: Node, id: string, next: Node): Node {
+  if (node.id === id) return next;
+  if (node.kind === "leaf") return node;
+  return { ...node, children: node.children.map((c) => replaceNode(c, id, next)) };
+}
+
+/** Reorder `sizes` the same way the children were reordered, so a sibling move keeps its proportions. */
+function permuteSizes(sizes: number[] | undefined, from: number, to: number): number[] | undefined {
+  if (!sizes || sizes.length === 0) return undefined;
+  const next = sizes.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
+const ZONE_DIR: Record<Exclude<DropZone, "center">, Direction> = {
+  left: "row",
+  right: "row",
+  top: "column",
+  bottom: "column",
+};
+
+/**
+ * Move leaf `sourceId` next to `targetId` on the given side. Returns the new root, or `null` when the
+ * move is a no-op (same pane, already in that position, or `center`).
+ *
+ * **`center` is not a swap.** There's no affordance for it, so the result is always a surprise; VS Code,
+ * iTerm and tmux all read a centre drop as "into this container", not "trade places". Leaving it unused
+ * also frees it as the primary target for explorer drops, so the two drag sources never fight over the
+ * same overlay region.
+ *
+ * The sibling fast-path is the reason this isn't just remove-then-split: when the source and target
+ * already share a split of the same direction, reordering the children array preserves the split's id
+ * **and** its sizes, so Allotment neither remounts nor forgets the layout the user dragged out.
+ */
+export function moveLeaf(root: Node, sourceId: string, targetId: string, zone: DropZone): Node | null {
+  if (zone === "center" || sourceId === targetId) return null;
+  const dir = ZONE_DIR[zone];
+  const before = zone === "left" || zone === "top";
+
+  const parent = parentSplit(root, sourceId);
+  if (parent && parent.dir === dir && parent.children.some((c) => c.id === targetId)) {
+    const from = parent.children.findIndex((c) => c.id === sourceId);
+    const targetIdx = parent.children.findIndex((c) => c.id === targetId);
+    // Index of the target *after* the source is lifted out — inserting before/after is relative to that.
+    const to = (targetIdx > from ? targetIdx - 1 : targetIdx) + (before ? 0 : 1);
+    if (to === from) return null; // already exactly there
+    const children = parent.children.slice();
+    const [moved] = children.splice(from, 1);
+    children.splice(to, 0, moved);
+    return replaceNode(root, parent.id, {
+      ...parent,
+      children,
+      sizes: permuteSizes(parent.sizes, from, to),
+    });
+  }
+
+  const source = findLeaf(root, sourceId);
+  if (!source) return null;
+  // Split the **pruned** tree, never the original: applying it to `root` leaves the source in two
+  // places at once, which shows up much later as a duplicated pane id.
+  const pruned = removeLeaf(root, sourceId);
+  if (!pruned || !findLeaf(pruned, targetId)) return null;
+  return splitLeafAt(pruned, targetId, dir, source, before ? "before" : "after");
+}
+
+/** Patch any node (leaf or split) by id — used to retarget a viewer without touching the tree shape. */
+export function updateLeaf(node: Node, id: string, patch: Partial<Leaf>): Node {
+  return setLeafProps(node, id, patch);
 }
 
 /** Store new pixel sizes on split `splitId` (from Allotment's onChange). */

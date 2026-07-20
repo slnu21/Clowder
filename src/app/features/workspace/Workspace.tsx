@@ -1,6 +1,8 @@
+import { useState } from "react";
 import Icon from "../../components/Icon";
 import TileTree from "./TileTree";
 import Welcome from "./Welcome";
+import { useDrag } from "./dragStore";
 import { useWorkspace } from "./store";
 
 /**
@@ -13,12 +15,36 @@ export default function Workspace() {
   const setActiveTab = useWorkspace((s) => s.setActiveTab);
   const closeTab = useWorkspace((s) => s.closeTab);
   const newTab = useWorkspace((s) => s.newTab);
+  const detachPaneToNewTab = useWorkspace((s) => s.detachPaneToNewTab);
+  const [detachArmed, setDetachArmed] = useState(false);
 
   const active = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
   return (
     <main className="pane workspace">
-      <div className="tabstrip">
+      {/* Dropping a pane on the empty part of the strip pulls it out into its own tab. Cross-tab
+          merging is deliberately not offered: a tab button is a 1-D target that can't express "which
+          pane, which side", and the destination tab isn't even mounted to preview. Detaching carries
+          no such ambiguity. */}
+      <div
+        className={"tabstrip" + (detachArmed ? " detach-armed" : "")}
+        onDragOver={(e) => {
+          if (useDrag.getState().payload?.kind !== "pane") return;
+          if (e.target !== e.currentTarget) return; // over a tab button, not the empty space
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setDetachArmed(true);
+        }}
+        onDragLeave={(e) => e.target === e.currentTarget && setDetachArmed(false)}
+        onDrop={(e) => {
+          const payload = useDrag.getState().payload;
+          setDetachArmed(false);
+          if (payload?.kind !== "pane" || e.target !== e.currentTarget) return;
+          e.preventDefault();
+          useDrag.getState().end();
+          detachPaneToNewTab(payload.paneId);
+        }}
+      >
         {tabs.map((t) => (
           <div
             key={t.id}

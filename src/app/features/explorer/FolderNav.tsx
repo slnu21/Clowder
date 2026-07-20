@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
+import { entryDragProps } from "./useEntryDrag";
 import { defaultRoot, listDir, listDrives, type Entry } from "../../lib/tauri";
 import { useSettings } from "../settings/store";
 import { basename, viewerKindFor } from "../workspace/model";
@@ -122,6 +123,7 @@ function FolderRow({
   return (
     <div
       className={"row" + (entry.hidden ? " dim" : "")}
+      {...entryDragProps(entry.path, entry.isDir)}
       onClick={() => onActivate(entry)}
       onContextMenu={(e) => onMenu(e, entry)}
       title={entry.path}
