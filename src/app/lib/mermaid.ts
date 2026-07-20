@@ -1,7 +1,8 @@
 // Mermaid 다이어그램: sandbox iframe 내부에선 스크립트 실행 불가 → 메인 스레드에서 SVG로 렌더 후 주입.
 // 무거운 라이브러리는 최초 mermaid 블록이 있을 때만 동적 import(코드 스플리팅) → 초기 번들 제외.
 // 렌더된 SVG는 sanitizeSvg 로 정화하며, srcdoc 은 정적 SVG만 담으므로 sandbox 격리가 유지된다.
-// (md-reader lib/mermaid.ts 수확 — deck은 다크 단일 테마라 themeId 인자 제거.)
+// (md-reader lib/mermaid.ts 수확 — themeId 인자 대신 앱의 data-theme을 직접 읽는다.)
+import { isLightDoc } from "./renderDoc";
 import { sanitizeSvg } from "./sanitize";
 
 let mermaidMod: Promise<typeof import("mermaid")> | null = null;
@@ -31,7 +32,8 @@ export async function renderMermaid(html: string): Promise<string> {
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
-    theme: "dark", // deck은 다크 전용
+    // SVG가 렌더 시점에 색을 굽기 때문에 테마가 바뀌면 다시 렌더해야 한다(MdViewer가 테마를 deps에 둔다).
+    theme: isLightDoc() ? "default" : "dark",
     // 다이어그램 미표시 두 근본 원인은 markdown.ts(base64 data-src) + sanitize.ts(foreignObject 통합지점)에서 해결됨.
     flowchart: { htmlLabels: false },
   });
