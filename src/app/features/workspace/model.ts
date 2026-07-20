@@ -21,6 +21,10 @@ export type Leaf = {
   cwd?: string;
   /** md/html file path (M6). */
   path?: string;
+  /** Palette index 1..TINT_COUNT. Auto-assigned on split so siblings are told apart at a glance. */
+  tint?: number;
+  /** The user picked this colour deliberately — only then does the head get a fill. */
+  tintFill?: boolean;
 };
 
 export type Split = {
@@ -53,6 +57,30 @@ export function basename(p: string): string {
 
 export function makeTerminalLeaf(cwd?: string, fallbackTitle = "bash"): Leaf {
   return { kind: "leaf", id: nextId("p"), content: "terminal", cwd, title: cwd ? basename(cwd) : fallbackTitle };
+}
+
+/** How many `--tint-N` tokens exist (see App.css). */
+export const TINT_COUNT = 8;
+
+/**
+ * The lowest palette index not already used **in this tab**.
+ *
+ * Tab-scoped rather than a module counter: closing a pane hands its colour back, so close-then-split
+ * doesn't march the palette forward forever. Past the palette size it wraps — eight distinguishable
+ * panes is already more than one screen wants.
+ */
+export function nextTint(root: Node): number {
+  const used = new Set<number>();
+  const walk = (n: Node): void => {
+    if (n.kind === "leaf") {
+      if (n.tint) used.add(n.tint);
+      return;
+    }
+    n.children.forEach(walk);
+  };
+  walk(root);
+  for (let i = 1; i <= TINT_COUNT; i++) if (!used.has(i)) return i;
+  return (used.size % TINT_COUNT) + 1;
 }
 
 export function makeViewerLeaf(path: string, content: "md" | "html"): Leaf {
@@ -109,6 +137,12 @@ export function splitLeaf(node: Node, targetId: string, dir: Direction, newLeaf:
     return { kind: "split", id: nextId("s"), dir, children: [node, newLeaf] };
   }
   return { ...node, children: node.children.map((c) => splitLeaf(c, targetId, dir, newLeaf)) };
+}
+
+/** Patch one leaf in place (immutably). `undefined` in the patch clears the field. */
+export function setLeafProps(node: Node, targetId: string, patch: Partial<Leaf>): Node {
+  if (node.kind === "leaf") return node.id === targetId ? { ...node, ...patch } : node;
+  return { ...node, children: node.children.map((c) => setLeafProps(c, targetId, patch)) };
 }
 
 /**
