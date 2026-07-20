@@ -12,6 +12,12 @@
  * accent for contrast. Palette is warm-neutral deep grey — deliberately low-blue.
  */
 :root {
+  /* Shell geometry. Declared here (not only in JS) so the layout is correct before the settings store
+     has run, and so the toggles only ever override a variable that already exists. */
+  --w-left: 248px;
+  --w-right: 272px;
+  --w-rail-mini: 40px;
+
   --bg-inset: #0f0f0e;   /* terminal — deepest, recedes */
   --bg-base: #171614;    /* app canvas */
   --bg-raised: #1f1e1b;  /* side/rail/tabstrip panels */
@@ -195,13 +201,23 @@ button {
 
 .deck {
   display: grid;
-  grid-template-columns: 248px 1fr 272px;
+  /* Widths live in variables so the panel toggles (and the UI scale) can move them without this rule
+     knowing about either. */
+  grid-template-columns: var(--w-left) 1fr var(--w-right);
   /* Pin the row to the container: an auto row grows to its tallest content, and a few hundred tree
      rows would stretch every pane (and the terminal) far past the window. */
   grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
+
+/* Collapsed columns need `display: none` on the pane itself, not just a 0 width — a zero-width pane
+   still paints its 1px border, which reads as a stray line down the window. */
+.deck[data-left="off"] { --w-left: 0px; }
+.deck[data-left="off"] > .explorer { display: none; }
+.deck[data-rail="mini"] { --w-right: var(--w-rail-mini); }
+.deck[data-rail="off"] { --w-right: 0px; }
+.deck[data-rail="off"] > .sessions { display: none; }
 
 /* ── custom title bar (native decorations off) ────────── */
 .titlebar {
@@ -597,6 +613,89 @@ button {
 }
 
 .session-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 7px; }
+
+/* ── mini session rail (40px) ─────────────────────────── */
+.sessions-mini {
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  overflow: hidden;
+}
+.mini-waiting {
+  flex: none;
+  min-width: 18px;
+  padding: 1px 4px;
+  border-radius: 9px;
+  background: var(--st-permission);
+  color: var(--bg-base);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+.mini-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.mini-session {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  max-height: 190px;
+  padding: 6px 0;
+  border-left: 3px solid var(--st-idle);
+  border-radius: 0 6px 6px 0;
+  background: var(--bg-overlay);
+  cursor: default;
+}
+.mini-session.linked { cursor: pointer; }
+.mini-session:hover { background: var(--hover); }
+.mini-session.awaiting_permission { border-left-color: var(--st-permission); }
+.mini-session.awaiting_input { border-left-color: var(--st-input); }
+.mini-session.working { border-left-color: var(--st-working); }
+.mini-session.dead { border-left-color: var(--st-dead); }
+.mini-name {
+  /* Vertical text with `mixed` orientation: Hangul stays upright, Latin rotates as a word. `upright`
+     would stack Latin one letter per line and swallow the rail. */
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  max-height: 100%;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mini-usage {
+  display: flex;
+  flex: none;
+  gap: 5px;
+  justify-content: center;
+  padding-top: 4px;
+  border-top: 1px solid var(--line-1);
+}
+.mini-meter { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.mini-meter-track {
+  display: flex;
+  align-items: flex-end;         /* meters fill from the bottom, like a tank */
+  width: 5px;
+  height: 44px;
+  border-radius: 3px;
+  background: var(--line-1);
+  overflow: hidden;
+}
+.mini-meter-fill { width: 100%; border-radius: 3px; background: var(--accent); }
+.mini-meter-label { color: var(--text-3); font-size: 9px; }
+
+/* ── title bar panel toggles ──────────────────────────── */
+.titlebar-panels { display: flex; gap: 2px; margin-left: 8px; }
+/* An "on" toggle is only slightly brighter — this is chrome, not a call to action. */
+.titlebar-panels .tb-btn[data-on] { color: var(--text-2); }
 
 /* session-tracking install prompt / uninstall (right rail) */
 .track-prompt { padding: 12px 10px; }

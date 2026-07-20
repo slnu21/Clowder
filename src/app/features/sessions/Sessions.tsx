@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<string, string> = {
  * need the user (permission / my-turn) sit on top. Read-only — the state lives in Rust; this renders
  * the pushed snapshot and ticks the elapsed clocks locally.
  */
-export default function Sessions() {
+export default function Sessions({ variant = "full" }: { variant?: "full" | "mini" }) {
   const [snap, setSnap] = useState<SessionsSnapshot | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -95,6 +95,22 @@ export default function Sessions() {
 
   const sessions = snap?.sessions ?? [];
   const waiting = snap?.waitingCount ?? 0;
+
+  // The narrow rail is a glance, not a panel: status colour, a vertical name, and the budgets. Install
+  // prompts and prose belong to the full rail — there is no room to say anything honestly in 40px.
+  if (variant === "mini") {
+    return (
+      <aside className="pane sessions sessions-mini" title="세션 레일 (좁게)">
+        {waiting > 0 && <span className="mini-waiting">{waiting}</span>}
+        <div className="mini-list">
+          {sessions.map((s) => (
+            <MiniSession key={s.sessionId} s={s} />
+          ))}
+        </div>
+        <MiniUsage usage={snap?.usage} topCtx={sessions[0]?.ctxPercent ?? null} />
+      </aside>
+    );
+  }
 
   return (
     <aside className="pane sessions">
@@ -206,6 +222,56 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** One session as a vertical chip: status stripe + name written top-to-bottom. */
+function MiniSession({ s }: { s: SessionView }) {
+  const focusLeaf = useWorkspace((w) => w.focusLeaf);
+  const linkedLeaf = s.paneId != null ? leafIdForPty(s.paneId) : undefined;
+  const label = [
+    s.project,
+    STATUS_LABEL[s.status] ?? s.status,
+    s.ctxPercent != null ? `ctx ${Math.round(s.ctxPercent)}%` : null,
+    s.toolName,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div
+      className={"mini-session " + s.status + (linkedLeaf ? " linked" : "")}
+      onMouseDown={() => linkedLeaf && focusLeaf(linkedLeaf)}
+      title={label}
+    >
+      {/* `vertical-rl` + `text-orientation: mixed` keeps Hangul upright while Latin rotates — the
+          alternative (`upright`) stacks Latin letter by letter and eats the whole rail. */}
+      <span className="mini-name">{s.project}</span>
+    </div>
+  );
+}
+
+/** Budgets as vertical meters, filling from the bottom. */
+function MiniUsage({ usage, topCtx }: { usage?: SessionsSnapshot["usage"]; topCtx: number | null }) {
+  const meters: Array<{ key: string; label: string; pct: number; title: string }> = [];
+  if (topCtx != null) meters.push({ key: "ctx", label: "C", pct: topCtx, title: `컨텍스트 ${Math.round(topCtx)}% (상단 세션)` });
+  if (usage?.fiveHourPct != null)
+    meters.push({ key: "5h", label: "5", pct: usage.fiveHourPct, title: `5시간 ${Math.round(usage.fiveHourPct)}%` });
+  if (usage?.sevenDayPct != null)
+    meters.push({ key: "7d", label: "7", pct: usage.sevenDayPct, title: `7일 ${Math.round(usage.sevenDayPct)}%` });
+  if (meters.length === 0) return null;
+
+  return (
+    <div className="mini-usage">
+      {meters.map((m) => (
+        <span className="mini-meter" key={m.key} title={m.title}>
+          <span className="mini-meter-track">
+            <span className="mini-meter-fill" style={{ height: `${Math.min(100, Math.max(0, m.pct))}%` }} />
+          </span>
+          <span className="mini-meter-label">{m.label}</span>
+        </span>
+      ))}
     </div>
   );
 }

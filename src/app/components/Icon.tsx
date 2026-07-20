@@ -21,7 +21,9 @@ export type IconName =
   | "session-link"
   | "plus"
   | "minimize"
-  | "maximize";
+  | "maximize"
+  | "panel-left"
+  | "panel-right";
 
 const SHAPES: Record<IconName, React.ReactNode> = {
   folder: (
@@ -88,6 +90,18 @@ const SHAPES: Record<IconName, React.ReactNode> = {
   ),
   minimize: <path d="M5 12h14" />,
   maximize: <rect width="14" height="14" x="5" y="5" rx="1.5" />,
+  "panel-left": (
+    <>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+    </>
+  ),
+  "panel-right": (
+    <>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M15 3v18" />
+    </>
+  ),
 };
 
 export default function Icon({
