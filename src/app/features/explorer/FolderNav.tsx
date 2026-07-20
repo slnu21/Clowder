@@ -3,6 +3,7 @@ import Icon from "../../components/Icon";
 import { defaultRoot, listDir, listDrives, type Entry } from "../../lib/tauri";
 import { useSettings } from "../settings/store";
 import { basename, viewerKindFor } from "../workspace/model";
+import { useExplorer } from "./store";
 import { parentOf, sortEntries } from "./util";
 
 /**
@@ -23,13 +24,24 @@ export default function FolderNav({
   const [drives, setDrives] = useState<Entry[]>([]);
   const favorites = useSettings((s) => s.settings.favorites);
 
+  const request = useExplorer((s) => s.request);
+
   useEffect(() => {
     void (async () => {
       setDrives(await listDrives());
+      // A reveal request that arrived before we mounted wins: its effect has already navigated, and
+      // resolving `defaultRoot` takes long enough that we would otherwise land on top of it.
+      if (useExplorer.getState().request) return;
       const start = await defaultRoot();
       await navigate(start ?? null);
     })();
   }, []);
+
+  // Someone outside the panel asked for a folder (a clicked path in terminal output). Same
+  // `navigate` as a click, so an unreadable directory is handled the same way too.
+  useEffect(() => {
+    if (request) void navigate(request.path);
+  }, [request]);
 
   async function navigate(path: string | null) {
     if (path === null) {

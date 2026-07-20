@@ -5,17 +5,25 @@ import { dirOf, inlineImages } from "../../lib/previewImages";
 import { buildDoc } from "../../lib/renderDoc";
 import { sanitizeHtml } from "../../lib/sanitize";
 import { readFile } from "../../lib/tauri";
+import { useSettings } from "../settings/store";
 
 /**
  * Markdown viewer: read the file, render (markdown-it → DOMPurify → relative-image inline → mermaid),
  * and inject the self-contained document into a **script-less sandbox iframe** (`allow-same-origin`
  * only — never `allow-scripts`). Harvested from md-reader's Preview, minus the editor machinery it
  * had (no worker, scroll-sync, TOC, or font settings) since deck only reads.
+ *
+ * Theme and accent are effect dependencies, not just styling: the document is built once into
+ * `srcdoc` with its tokens already resolved (an iframe gets no cascade from us) and mermaid bakes its
+ * colours into the SVG, so a theme flip has to rebuild the document. Live terminals can repaint in
+ * place; a rendered document cannot.
  */
 export default function MdViewer({ path }: { path: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const theme = useSettings((s) => s.settings.theme);
+  const accent = useSettings((s) => s.settings.accent);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +46,7 @@ export default function MdViewer({ path }: { path: string }) {
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, theme, accent]);
 
   // Esc closes the image lightbox.
   useEffect(() => {

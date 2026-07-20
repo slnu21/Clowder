@@ -3,6 +3,7 @@ pub mod beacon_install;
 pub mod conpty_check;
 pub mod correlate;
 pub mod fs_ops;
+pub mod link;
 pub mod liveness;
 pub mod pty;
 pub mod quote;
@@ -36,6 +37,11 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Clipboard goes through Rust rather than `navigator.clipboard`: the webview API needs a
+        // secure context *and* live user activation, and inside WebView2 it fails with a bare
+        // NotAllowedError whenever either is missing. A copy that silently doesn't copy is worse
+        // than no copy button at all.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
             default_shell,
@@ -48,6 +54,7 @@ pub fn run() {
             fs_ops::default_root,
             fs_ops::read_file,
             fs_ops::read_file_base64,
+            link::resolve_link_target,
             quote::quote_path_cmd,
             sessions::sessions_snapshot,
             settings::get_settings,
