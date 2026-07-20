@@ -45,6 +45,57 @@ fn find_bytes(hay: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && hay.windows(needle.len()).any(|w| w == needle)
 }
 
+/// Session id for the throwaway usage entry — leading underscore keeps it out of the way of real
+/// sessions, and it is deleted either way.
+const PROBE_SESSION: &str = "_selftest-probe";
+
+/// Feed a synthetic statusline payload to this exe and see whether a usage entry appears.
+fn statusline_round_trip() -> (bool, String) {
+    let Ok(exe) = std::env::current_exe() else {
+        return (false, "current_exe unknown".into());
+    };
+    let Some(target) = crate::spool::clowder_dir()
+        .map(|d| d.join("usage").join(format!("{PROBE_SESSION}.json")))
+    else {
+        return (false, "LOCALAPPDATA unset".into());
+    };
+    let _ = fs::remove_file(&target); // a leftover from a previous run must not pass this for us
+
+    let payload = format!(
+        r#"{{"session_id":"{PROBE_SESSION}","context_window":{{"used_percentage":42.5,"total_input_tokens":1,"total_output_tokens":1,"context_window_size":2}}}}"#
+    );
+    let spawned = std::process::Command::new(&exe)
+        .args(["--beacon", "--statusline"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped()) // the user's original line, if any — not ours to print
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    let Ok(mut child) = spawned else {
+        return (false, "could not spawn --beacon --statusline".into());
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write as _;
+        let _ = stdin.write_all(payload.as_bytes());
+    }
+    if child.wait_with_output().is_err() {
+        return (false, "beacon did not exit".into());
+    }
+
+    let written = fs::read_to_string(&target).unwrap_or_default();
+    let ok = written.contains("42.5");
+    let _ = fs::remove_file(&target);
+    (
+        ok,
+        if ok {
+            format!("payload -> {}", target.display())
+        } else if written.is_empty() {
+            format!("no usage written to {}", target.display())
+        } else {
+            format!("usage written but percentage missing: {written}")
+        },
+    )
+}
+
 pub fn run() -> i32 {
     let mut t = SelfTest::new();
 
@@ -142,6 +193,15 @@ pub fn run() -> i32 {
             format!("{} bytes in {:?} (<= ~{} frames)", flood.len(), elapsed, frames),
         );
     }
+
+    // --- statusline round trip ---
+    // Usage has exactly one source: Claude Code piping the statusline payload into `--beacon
+    // --statusline`. That used to travel through a bash wrapper, and when the wrapper silently failed
+    // nothing in the app noticed — the rail just showed empty numbers under a green "installed". So run
+    // the real binary the way Claude Code now runs it (no shell, no script) and assert a spool file comes
+    // out the other end.
+    let (ok, detail) = statusline_round_trip();
+    t.check("statusline_writes_usage", ok, detail);
 
     // M5 adds: spool parse/sort/reap, ancestor walk.
 
