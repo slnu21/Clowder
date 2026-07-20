@@ -138,15 +138,71 @@ fn is_installed(root: &Value) -> bool {
 /// Marker line inside the wrapper script that carries the base64 of the user's original statusLine value.
 const WRAP_MARKER: &str = "# clowder-original-json-b64:";
 
-/// `~/.claude/clowder-statusline-wrap.sh` — the bash wrapper that tees the payload to Clowder's usage
-/// spool, then runs the user's original statusline. Lives next to settings.json.
+/// `~/.claude/clowder-statusline-wrap.sh` — the **legacy** bash wrapper (pre-native passthrough). Kept
+/// only so an existing install can be migrated and removed.
 fn statusline_wrap_path() -> Option<PathBuf> {
     settings_path().and_then(|p| p.parent().map(|d| d.join("clowder-statusline-wrap.sh")))
 }
 
-/// True when a statusLine command is *our* wrapper — path-independent, matched by the script's basename.
+/// `~/.claude/clowder-statusline.json` — where the user's original statusLine value now lives, next to
+/// settings.json. Replaces the base64 marker inside the old shell script: no shell, no script, just data.
+fn statusline_state_path() -> Option<PathBuf> {
+    settings_path().and_then(|p| p.parent().map(|d| d.join("clowder-statusline.json")))
+}
+
+/// The statusLine command we install: the staged beacon invoked **directly**. No shell and no script file
+/// stand between Claude Code and us.
+///
+/// Why that matters: Claude Code runs the statusLine command through Git Bash *when Git Bash is
+/// installed, and through PowerShell when it is not* (documented). The old `bash ~/…wrap.sh` therefore
+/// resolved `bash` from PowerShell's PATH on a Git-Bash-less machine — where `bash.exe` is usually the
+/// WSL stub in `WindowsApps`, which exits 1 with no distro installed. A statusLine command that fails
+/// renders as a **blank status line, silently** (also documented), so the failure is invisible.
+fn statusline_command(beacon: &str) -> String {
+    format!("\"{beacon}\" --beacon --statusline")
+}
+
+/// True when a statusLine command is *ours* — the native invocation or the legacy wrapper script.
+/// Path-independent: the native form is matched by its flags, the legacy one by the script's basename.
 fn is_clowder_statusline(cmd: Option<&str>) -> bool {
-    cmd.is_some_and(|c| c.replace('\\', "/").to_lowercase().contains("clowder-statusline-wrap"))
+    cmd.is_some_and(|c| {
+        let n = c.replace('\\', "/").to_lowercase();
+        n.contains("clowder-statusline-wrap")
+            || (n.contains("clowder") && n.contains("--beacon") && n.contains("--statusline"))
+    })
+}
+
+/// What to render when the user had no statusline of their own (their choice at install time).
+/// `none` = stay invisible and only collect usage; `clowder` = draw Clowder's own one-line summary.
+fn normalize_mode(mode: Option<&str>) -> &'static str {
+    match mode {
+        Some("clowder") => "clowder",
+        _ => "none",
+    }
+}
+
+/// Read the sidecar at `path`: `(original statusLine value, mode)`. `None` when there is no sidecar at
+/// all — which the beacon reads as "not installed by us", and it then prints nothing.
+fn read_statusline_state(path: &Path) -> Option<(Option<Value>, String)> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    let original = v.get("original").filter(|o| !o.is_null()).cloned();
+    let mode = normalize_mode(v.get("mode").and_then(|m| m.as_str())).to_string();
+    Some((original, mode))
+}
+
+/// The sidecar at its real location — what the beacon consults on every statusline render.
+pub fn statusline_state() -> Option<(Option<Value>, String)> {
+    read_statusline_state(&statusline_state_path()?)
+}
+
+fn write_statusline_state(path: &Path, original: Option<&Value>, mode: &str) -> Result<(), String> {
+    let body = json!({ "original": original.cloned().unwrap_or(Value::Null), "mode": normalize_mode(Some(mode)) });
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let text = serde_json::to_string_pretty(&body).map_err(|e| e.to_string())?;
+    std::fs::write(path, text).map_err(|e| e.to_string())
 }
 
 /// Recover the user's original statusLine value from the wrapper's marker comment (`None` if the user had
@@ -166,73 +222,48 @@ fn read_wrap_original(wrap_path: &Path) -> Option<Value> {
     None
 }
 
-/// Write the wrapper script (LF, no BOM). `original` is the statusLine value we delegate to — its inner
-/// `command` gets the payload piped in; if there is none we print a minimal line so Claude Code still
-/// renders something. `cb_exe` is the forward-slashed absolute path to clowder.exe.
-fn write_wrapper(wrap_path: &Path, cb_exe: &str, original: Option<&Value>) -> Result<(), String> {
-    let b64 = match original {
-        Some(v) => base64::engine::general_purpose::STANDARD
-            .encode(serde_json::to_vec(v).map_err(|e| e.to_string())?),
-        None => String::new(),
-    };
-    let orig_cmd = original
-        .and_then(|v| v.get("command"))
-        .and_then(|c| c.as_str())
-        .filter(|s| !s.is_empty());
-    let delegate = match orig_cmd {
-        Some(cmd) => format!("printf '%s' \"$input\" | {cmd}"),
-        None => "printf 'Claude Code\\n'".to_string(),
-    };
-    let lines: Vec<String> = vec![
-        "#!/bin/sh".into(),
-        "# Clowder statusline wrapper (auto-generated by Clowder session-tracking install).".into(),
-        "# Tees the statusline payload to Clowder (context/5h/7d usage) then runs your original statusline."
-            .into(),
-        "# Your original statusLine is preserved in the marker below and restored on uninstall.".into(),
-        format!("{WRAP_MARKER} {b64}"),
-        "input=$(cat)".into(),
-        format!("cb=\"{cb_exe}\""),
-        "if [ -f \"$cb\" ]; then".into(),
-        "  printf '%s' \"$input\" | \"$cb\" --beacon --statusline >/dev/null 2>&1 &".into(),
-        "fi".into(),
-        delegate,
-    ];
-    let script = lines.join("\n") + "\n";
-    if let Some(dir) = wrap_path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(wrap_path, script).map_err(|e| e.to_string())
-}
-
-/// Wrap the user's statusLine so Clowder tees usage, preserving the original in the wrapper's marker.
-/// Idempotent: if statusLine is already our wrapper, we recover the *true* original rather than wrapping
-/// the wrapper.
-fn apply_statusline_install(root: &mut Value, wrap_path: &Path, cb_exe: &str) -> Result<(), String> {
+/// Point statusLine at the beacon directly, preserving the user's original in the sidecar.
+///
+/// Idempotent in the way that matters: when the current statusLine is already ours we recover the **true**
+/// original (from the sidecar, or from the legacy wrapper's marker) instead of preserving ourselves and
+/// losing it. `mode` only matters when there is no original.
+fn apply_statusline_install(
+    root: &mut Value,
+    state_path: &Path,
+    wrap_path: &Path,
+    beacon: &str,
+    mode: &str,
+) -> Result<(), String> {
     if !root.is_object() {
         *root = json!({});
     }
     let current = root.get("statusLine").cloned();
     let current_cmd = current.as_ref().and_then(|v| v.get("command")).and_then(|c| c.as_str());
     let original: Option<Value> = if is_clowder_statusline(current_cmd) {
-        read_wrap_original(wrap_path)
+        read_statusline_state(state_path)
+            .and_then(|(o, _)| o)
+            .or_else(|| read_wrap_original(wrap_path))
     } else {
         current.clone().filter(|v| !v.is_null())
     };
-    write_wrapper(wrap_path, cb_exe, original.as_ref())?;
+    write_statusline_state(state_path, original.as_ref(), mode)?;
     root.as_object_mut().unwrap().insert(
         "statusLine".into(),
-        json!({ "type": "command", "command": "bash ~/.claude/clowder-statusline-wrap.sh" }),
+        json!({ "type": "command", "command": statusline_command(beacon) }),
     );
+    let _ = std::fs::remove_file(wrap_path); // the shell wrapper has no job left
     Ok(())
 }
 
-/// Restore the user's original statusLine and delete the wrapper script. No-op on the settings if the
-/// statusLine isn't ours (the user replaced it after install — leave their choice alone).
-fn apply_statusline_uninstall(root: &mut Value, wrap_path: &Path) {
+/// Restore the user's original statusLine and delete our sidecar. No-op on the settings if the statusLine
+/// isn't ours (the user replaced it after install — leave their choice alone).
+fn apply_statusline_uninstall(root: &mut Value, state_path: &Path, wrap_path: &Path) {
     let current_cmd =
         root.get("statusLine").and_then(|v| v.get("command")).and_then(|c| c.as_str());
     if is_clowder_statusline(current_cmd) {
-        let original = read_wrap_original(wrap_path);
+        let original = read_statusline_state(state_path)
+            .and_then(|(o, _)| o)
+            .or_else(|| read_wrap_original(wrap_path));
         if let Some(obj) = root.as_object_mut() {
             match original {
                 Some(v) => {
@@ -242,6 +273,49 @@ fn apply_statusline_uninstall(root: &mut Value, wrap_path: &Path) {
                     obj.remove("statusLine");
                 }
             }
+        }
+    }
+    let _ = std::fs::remove_file(state_path);
+    let _ = std::fs::remove_file(wrap_path);
+}
+
+/// Move a pre-native install onto the sidecar: lift the original out of the wrapper's base64 marker,
+/// repoint statusLine at the beacon, delete the `.sh`. Fail-soft and idempotent — a machine with no
+/// wrapper leaves here untouched.
+///
+/// Runs at startup rather than at install time because the whole point is to fix installs the user is
+/// *already* carrying, without making them click anything.
+fn migrate_statusline_wrapper(beacon: &str) {
+    let (Some(path), Some(state_path), Some(wrap_path)) =
+        (settings_path(), statusline_state_path(), statusline_wrap_path())
+    else {
+        return;
+    };
+    migrate_statusline_wrapper_at(&path, &state_path, &wrap_path, beacon);
+}
+
+fn migrate_statusline_wrapper_at(path: &Path, state_path: &Path, wrap_path: &Path, beacon: &str) {
+    if !wrap_path.exists() {
+        return;
+    }
+    // The old wrapper printed `Claude Code` when there was no original, so "clowder" preserves what the
+    // user currently sees; with an original, mode is unused.
+    let original = read_wrap_original(wrap_path);
+    if write_statusline_state(state_path, original.as_ref(), "clowder").is_err() {
+        return; // leave the working wrapper in place rather than orphan the original
+    }
+    let mut root = load(path);
+    let current_cmd = root.get("statusLine").and_then(|v| v.get("command")).and_then(|c| c.as_str());
+    if is_clowder_statusline(current_cmd) {
+        backup(path);
+        if let Some(obj) = root.as_object_mut() {
+            obj.insert(
+                "statusLine".into(),
+                json!({ "type": "command", "command": statusline_command(beacon) }),
+            );
+        }
+        if save(path, &root).is_err() {
+            return;
         }
     }
     let _ = std::fs::remove_file(wrap_path);
@@ -345,32 +419,79 @@ fn remove_beacon_binary() {
 pub fn refresh_beacon_binary_on_startup() {
     let Some(path) = settings_path() else { return };
     if is_installed(&load(&path)) {
-        let _ = ensure_beacon_binary();
+        if let Some(beacon) = ensure_beacon_binary().or_else(exe_path) {
+            migrate_statusline_wrapper(&beacon);
+        }
     }
 }
 
 // ---- Tauri commands ----
 
-#[tauri::command]
-pub fn beacon_installed() -> bool {
-    match settings_path() {
-        Some(p) => is_installed(&load(&p)),
-        None => false,
-    }
+/// What the rail needs to tell the truth about tracking. `hooks` alone used to stand in for "installed",
+/// which is exactly the combination the user hits when hooks land but usage never arrives: the UI says
+/// installed, the numbers stay empty, and nothing in the app admits the gap.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BeaconStatus {
+    /// Clowder's hook groups are present in settings.json.
+    pub hooks: bool,
+    /// statusLine points at our beacon (the only source of usage).
+    pub statusline: bool,
+    /// The staged `%LOCALAPPDATA%\Clowder\bin\clowder.exe` exists — hooks reference it by that path.
+    pub binary: bool,
+    /// The user has a statusLine of their own that we would be wrapping. Drives whether install asks.
+    pub user_statusline: bool,
+    /// Newest spool write, ISO-8601 — "installed but nothing has arrived" is a distinct state.
+    pub last_hook_at: Option<String>,
+    pub last_usage_at: Option<String>,
+}
+
+/// Newest mtime under a Clowder spool subdir, as ISO-8601.
+fn newest_spool_write(sub: &str) -> Option<String> {
+    let dir = crate::spool::clowder_dir()?.join(sub);
+    let newest = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok()?.metadata().ok()?.modified().ok())
+        .max()?;
+    let secs = newest.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64;
+    Some(crate::beacon::unix_to_iso(secs))
 }
 
 #[tauri::command]
-pub fn beacon_install() -> Result<(), String> {
+pub fn beacon_status() -> BeaconStatus {
+    let root = settings_path().map(|p| load(&p)).unwrap_or_else(|| json!({}));
+    let cmd = root.get("statusLine").and_then(|v| v.get("command")).and_then(|c| c.as_str());
+    let ours = is_clowder_statusline(cmd);
+    BeaconStatus {
+        hooks: is_installed(&root),
+        statusline: ours,
+        binary: beacon_bin_dir().is_some_and(|d| d.join("clowder.exe").exists()),
+        // Ours doesn't count as theirs, and the sidecar remembers what we displaced.
+        user_statusline: if ours {
+            statusline_state().and_then(|(o, _)| o).is_some()
+        } else {
+            cmd.is_some_and(|c| !c.is_empty())
+        },
+        last_hook_at: newest_spool_write("sessions"),
+        last_usage_at: newest_spool_write("usage"),
+    }
+}
+
+/// `mode` decides what the status line shows for a user who had none: `"none"` (collect silently) or
+/// `"clowder"` (draw our own line). Ignored when we're wrapping an original.
+#[tauri::command]
+pub fn beacon_install(mode: Option<String>) -> Result<(), String> {
     let path = settings_path().ok_or("USERPROFILE unavailable")?;
     // Prefer the stable staged binary so hooks survive the app moving; fall back to the running exe.
     let beacon = ensure_beacon_binary().or_else(exe_path).ok_or("cannot resolve clowder.exe path")?;
     backup(&path);
     let mut root = load(&path);
     apply_install(&mut root, &format!("\"{beacon}\""));
-    // Usage self-production via statusline wrap — fail-soft: never let it block session tracking.
-    if let Some(wrap) = statusline_wrap_path() {
-        if let Err(e) = apply_statusline_install(&mut root, &wrap, &beacon) {
-            eprintln!("[clowder] statusline wrap skipped: {e}");
+    // Usage self-production — fail-soft: never let it block session tracking.
+    if let (Some(state), Some(wrap)) = (statusline_state_path(), statusline_wrap_path()) {
+        let mode = normalize_mode(mode.as_deref());
+        if let Err(e) = apply_statusline_install(&mut root, &state, &wrap, &beacon, mode) {
+            eprintln!("[clowder] statusline install skipped: {e}");
         }
     }
     save(&path, &root)
@@ -385,8 +506,8 @@ pub fn beacon_uninstall() -> Result<(), String> {
     backup(&path);
     let mut root = load(&path);
     apply_uninstall(&mut root);
-    if let Some(wrap) = statusline_wrap_path() {
-        apply_statusline_uninstall(&mut root, &wrap);
+    if let (Some(state), Some(wrap)) = (statusline_state_path(), statusline_wrap_path()) {
+        apply_statusline_uninstall(&mut root, &state, &wrap);
     }
     save(&path, &root)?;
     remove_beacon_binary(); // tidy: drop the staged copy now that nothing references it
@@ -483,66 +604,120 @@ mod tests {
         assert!(stop[0]["hooks"][0]["command"].as_str().unwrap().contains("other-tool"));
     }
 
-    // ---- statusline wrap ----
+    // ---- statusline (native passthrough) ----
 
-    /// A distinct temp wrapper path per test (cargo runs tests in parallel threads).
-    fn tmp_wrap(name: &str) -> PathBuf {
+    /// A distinct temp dir per test (cargo runs tests in parallel threads) holding the pair of paths the
+    /// statusline functions work on.
+    fn tmp_paths(name: &str) -> (PathBuf, PathBuf) {
         let dir = std::env::temp_dir().join(format!("clowder-test-{name}"));
         let _ = std::fs::create_dir_all(&dir);
-        let p = dir.join("clowder-statusline-wrap.sh");
-        let _ = std::fs::remove_file(&p);
-        p
+        let state = dir.join("clowder-statusline.json");
+        let wrap = dir.join("clowder-statusline-wrap.sh");
+        let _ = std::fs::remove_file(&state);
+        let _ = std::fs::remove_file(&wrap);
+        (state, wrap)
     }
 
+    const BEACON: &str = "C:/Users/me/AppData/Local/Clowder/bin/clowder.exe";
+
     #[test]
-    fn statusline_wraps_and_preserves_full_original() {
-        let wrap = tmp_wrap("wrap-preserve");
+    fn statusline_calls_the_beacon_directly_and_preserves_the_full_original() {
+        let (state, wrap) = tmp_paths("sl-preserve");
         let mut root = json!({ "statusLine": { "type": "command", "command": "npx ccstatusline@latest", "padding": 0 } });
-        apply_statusline_install(&mut root, &wrap, "D:/x/clowder.exe").unwrap();
-        // settings.json now points at our wrapper
-        assert_eq!(root["statusLine"]["command"], "bash ~/.claude/clowder-statusline-wrap.sh");
-        // script written with marker, delegate to original, and the usage tee
-        let script = std::fs::read_to_string(&wrap).unwrap();
-        assert!(script.contains(WRAP_MARKER));
-        assert!(script.contains("npx ccstatusline@latest"), "delegate must pipe to original");
-        assert!(script.contains("--beacon --statusline"), "must tee to clowder usage");
-        assert!(!script.contains('\r'), "must be LF-only for /bin/sh");
-        // the FULL original object is recoverable (not just the command string)
-        let orig = read_wrap_original(&wrap).unwrap();
+        apply_statusline_install(&mut root, &state, &wrap, BEACON, "none").unwrap();
+        // No shell and no script stand between Claude Code and the beacon — that was the whole bug.
+        let cmd = root["statusLine"]["command"].as_str().unwrap();
+        assert_eq!(cmd, format!("\"{BEACON}\" --beacon --statusline"));
+        assert!(!cmd.contains("bash"), "must not depend on a bash on PATH");
+        assert!(!cmd.contains(".sh"), "must not depend on a script file");
+        // the FULL original object survives in the sidecar (not just the command string)
+        let (orig, _) = read_statusline_state(&state).unwrap();
+        let orig = orig.unwrap();
         assert_eq!(orig["command"], "npx ccstatusline@latest");
         assert_eq!(orig["padding"], 0);
     }
 
     #[test]
     fn statusline_uninstall_restores_original() {
-        let wrap = tmp_wrap("wrap-restore");
+        let (state, wrap) = tmp_paths("sl-restore");
         let mut root = json!({ "statusLine": { "type": "command", "command": "my-status --foo", "padding": 2 } });
-        apply_statusline_install(&mut root, &wrap, "D:/x/clowder.exe").unwrap();
-        apply_statusline_uninstall(&mut root, &wrap);
+        apply_statusline_install(&mut root, &state, &wrap, BEACON, "none").unwrap();
+        apply_statusline_uninstall(&mut root, &state, &wrap);
         assert_eq!(root["statusLine"]["command"], "my-status --foo");
         assert_eq!(root["statusLine"]["padding"], 2); // exact restore, padding intact
-        assert!(!wrap.exists(), "wrapper script deleted on uninstall");
+        assert!(!state.exists(), "sidecar deleted on uninstall");
     }
 
     #[test]
     fn statusline_uninstall_removes_when_there_was_no_original() {
-        let wrap = tmp_wrap("wrap-none");
+        let (state, wrap) = tmp_paths("sl-none");
         let mut root = json!({ "permissions": { "allow": ["Read"] } }); // no statusLine at all
-        apply_statusline_install(&mut root, &wrap, "D:/x/clowder.exe").unwrap();
-        assert_eq!(root["statusLine"]["command"], "bash ~/.claude/clowder-statusline-wrap.sh");
-        apply_statusline_uninstall(&mut root, &wrap);
-        assert!(root.get("statusLine").is_none(), "statusLine removed entirely, not left as wrapper");
+        apply_statusline_install(&mut root, &state, &wrap, BEACON, "none").unwrap();
+        assert!(root["statusLine"]["command"].as_str().unwrap().contains("--statusline"));
+        apply_statusline_uninstall(&mut root, &state, &wrap);
+        assert!(root.get("statusLine").is_none(), "statusLine removed entirely, not left as ours");
         assert_eq!(root["permissions"]["allow"][0], "Read"); // unrelated settings untouched
     }
 
     #[test]
+    fn statusline_mode_is_recorded_only_as_asked() {
+        let (state, wrap) = tmp_paths("sl-mode");
+        let mut root = json!({});
+        apply_statusline_install(&mut root, &state, &wrap, BEACON, "clowder").unwrap();
+        assert_eq!(read_statusline_state(&state).unwrap().1, "clowder");
+        // Anything we don't recognise means "stay quiet" — a user who had no statusline never gets
+        // handed one by accident.
+        apply_statusline_install(&mut root, &state, &wrap, BEACON, "garbage").unwrap();
+        assert_eq!(read_statusline_state(&state).unwrap().1, "none");
+    }
+
+    #[test]
     fn statusline_reinstall_keeps_true_original() {
-        let wrap = tmp_wrap("wrap-reinstall");
+        let (state, wrap) = tmp_paths("sl-reinstall");
         let mut root = json!({ "statusLine": { "type": "command", "command": "original-line" } });
-        apply_statusline_install(&mut root, &wrap, "D:/x/clowder.exe").unwrap();
-        apply_statusline_install(&mut root, &wrap, "D:/y/clowder.exe").unwrap(); // wrap again
-        let orig = read_wrap_original(&wrap).unwrap();
-        assert_eq!(orig["command"], "original-line", "must not wrap our own wrapper");
+        apply_statusline_install(&mut root, &state, &wrap, BEACON, "none").unwrap();
+        apply_statusline_install(&mut root, &state, &wrap, "D:/other/clowder.exe", "none").unwrap();
+        let (orig, _) = read_statusline_state(&state).unwrap();
+        assert_eq!(orig.unwrap()["command"], "original-line", "must not preserve ourselves as the original");
+    }
+
+    /// The upgrade path that matters: a user carrying the old bash wrapper must end up on the native
+    /// command with their original intact, without clicking anything.
+    #[test]
+    fn legacy_wrapper_migrates_to_sidecar() {
+        let (state, wrap) = tmp_paths("sl-migrate");
+        let settings = wrap.parent().unwrap().join("settings.json");
+        // A pre-native install: statusLine points at the .sh, the original lives in its marker.
+        let original = json!({ "type": "command", "command": "bash ~/.claude/statusline-command.sh" });
+        let b64 = base64::engine::general_purpose::STANDARD.encode(serde_json::to_vec(&original).unwrap());
+        std::fs::write(&wrap, format!("#!/bin/sh\n{WRAP_MARKER} {b64}\ninput=$(cat)\n")).unwrap();
+        save(
+            &settings,
+            &json!({ "statusLine": { "type": "command", "command": "bash ~/.claude/clowder-statusline-wrap.sh" } }),
+        )
+        .unwrap();
+
+        migrate_statusline_wrapper_at(&settings, &state, &wrap, BEACON);
+
+        let root = load(&settings);
+        assert_eq!(root["statusLine"]["command"].as_str().unwrap(), format!("\"{BEACON}\" --beacon --statusline"));
+        let (orig, _) = read_statusline_state(&state).unwrap();
+        assert_eq!(orig.unwrap()["command"], "bash ~/.claude/statusline-command.sh");
+        assert!(!wrap.exists(), "the .sh is gone once its contents moved");
+        // And it stays put on a second run.
+        migrate_statusline_wrapper_at(&settings, &state, &wrap, BEACON);
+        assert_eq!(read_statusline_state(&state).unwrap().0.unwrap()["command"], "bash ~/.claude/statusline-command.sh");
+    }
+
+    /// Migration must not touch a statusLine the user replaced with their own after installing.
+    #[test]
+    fn migration_leaves_a_user_replaced_statusline_alone() {
+        let (state, wrap) = tmp_paths("sl-migrate-user");
+        let settings = wrap.parent().unwrap().join("settings.json");
+        std::fs::write(&wrap, format!("#!/bin/sh\n{WRAP_MARKER} \n")).unwrap();
+        save(&settings, &json!({ "statusLine": { "type": "command", "command": "my-own-line" } })).unwrap();
+        migrate_statusline_wrapper_at(&settings, &state, &wrap, BEACON);
+        assert_eq!(load(&settings)["statusLine"]["command"], "my-own-line");
     }
 
     // ---- beacon binary staging ----
@@ -572,12 +747,16 @@ mod tests {
 
     #[test]
     fn statusline_wraps_vigil_and_restores_it() {
-        let wrap = tmp_wrap("wrap-vigil");
+        let (state, wrap) = tmp_paths("sl-vigil");
         let mut root = json!({ "statusLine": { "type": "command", "command": "bash ~/.claude/vigil-statusline-wrap.sh" } });
-        apply_statusline_install(&mut root, &wrap, "D:/x/clowder.exe").unwrap();
-        let script = std::fs::read_to_string(&wrap).unwrap();
-        assert!(script.contains("vigil-statusline-wrap"), "delegates to Vigil's wrapper, not clobbered");
-        apply_statusline_uninstall(&mut root, &wrap);
+        apply_statusline_install(&mut root, &state, &wrap, BEACON, "none").unwrap();
+        let (orig, _) = read_statusline_state(&state).unwrap();
+        assert_eq!(
+            orig.unwrap()["command"],
+            "bash ~/.claude/vigil-statusline-wrap.sh",
+            "Vigil's wrapper is the original we delegate to, not something we clobber"
+        );
+        apply_statusline_uninstall(&mut root, &state, &wrap);
         assert_eq!(root["statusLine"]["command"], "bash ~/.claude/vigil-statusline-wrap.sh"); // Vigil back
     }
 }

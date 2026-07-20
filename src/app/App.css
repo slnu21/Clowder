@@ -615,6 +615,16 @@ button {
 }
 .track-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 26%, transparent); }
 .track-btn:disabled { opacity: 0.6; }
+/* Second choice in the statusline question — same shape, quieter, so the pair reads as one decision. */
+.track-btn-alt {
+  margin-top: 6px;
+  border-color: var(--line-2);
+  background: none;
+  color: var(--text-2);
+}
+.track-btn-alt:hover:not(:disabled) { background: var(--hover); }
+/* Partial install: hooks in, usage not. Warn, not error — half of tracking is genuinely working. */
+.track-warn .track-title { color: var(--warn); }
 .track-off {
   flex: none;
   margin: 0 10px 10px;
