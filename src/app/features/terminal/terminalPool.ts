@@ -266,6 +266,54 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
   return entry;
 }
 
+/**
+ * Put a pane's terminal into `host` and make it usable again.
+ *
+ * Moving a pane changes its parent, and React unmounts/remounts on a parent change even when the `key`
+ * is identical. `acquire` is idempotent so xterm and the PTY survive that — but three things do not,
+ * and all three are invisible until someone tries to type:
+ *
+ * - **fit**: if the new box happens to match the old one, no ResizeObserver fires and cols/rows stay
+ *   sized for the container the pane just left. So refit unconditionally, on the next frame (the box
+ *   has no layout yet during this one).
+ * - **scrollback position**: detaching from the document destroys `.xterm-viewport`'s box and the view
+ *   snaps to the bottom. `detach` remembers `viewportY`; this restores it.
+ * - **focus**: a detached terminal blurs and never comes back on its own — which reads as "typing is
+ *   dead after a drag". `setActivePane`'s `focusPane` runs *before* the remount, so it can't help here.
+ *
+ * `focus` is passed in rather than read from the workspace store: the store already imports this module,
+ * and reaching back would make the cycle real.
+ */
+export function attach(
+  leafId: string,
+  host: HTMLElement,
+  opts: { cwd?: string; focus?: boolean } = {},
+): PoolEntry {
+  const entry = acquire(leafId, opts.cwd);
+  host.appendChild(entry.el);
+  requestAnimationFrame(() => {
+    if (host.clientHeight > 0 && host.clientWidth > 0) entry.fit.fit();
+    const y = savedScroll.get(leafId);
+    if (y != null) {
+      entry.term.scrollToLine(y);
+      savedScroll.delete(leafId);
+    }
+    if (opts.focus) entry.term.focus();
+  });
+  return entry;
+}
+
+/** Take a pane's terminal out of `host`, remembering what the DOM is about to forget. */
+export function detach(leafId: string, host: HTMLElement): void {
+  const entry = pool.get(leafId);
+  if (!entry) return;
+  savedScroll.set(leafId, entry.term.buffer.active.viewportY);
+  if (entry.el.parentNode === host) host.removeChild(entry.el);
+}
+
+/** Scroll position parked across a detach/attach pair. */
+const savedScroll = new Map<string, number>();
+
 /** Tear a pane down for good: close the shell, dispose the terminal, drop the entry. */
 export function release(leafId: string): void {
   const entry = pool.get(leafId);
@@ -278,6 +326,7 @@ export function release(leafId: string): void {
   entry.term.dispose();
   entry.el.remove();
   pool.delete(leafId);
+  savedScroll.delete(leafId);
 }
 
 /** Leaf id running under a given pty id — resolves a correlated session's pane. */

@@ -1,6 +1,6 @@
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useExplorer } from "../features/explorer/store";
-import { basename, viewerKindFor } from "../features/workspace/model";
+import { basename, makeViewerLeaf, viewerKindFor } from "../features/workspace/model";
 import { useWorkspace } from "../features/workspace/store";
 import { resolveLinkTarget } from "./tauri";
 
@@ -15,7 +15,9 @@ import { resolveLinkTarget } from "./tauri";
  *
  * The rules:
  * - **URL** → the default browser. Leaving the app is the whole point of a URL.
- * - **md / html / txt** → our own viewer, in a tab. This is the case that prompted the work.
+ * - **md / html / txt** → our own viewer, **beside the pane you clicked in** when there is one, so the
+ *   output you were reading stays on screen; otherwise a tab of its own. This is the case that
+ *   prompted the work.
  * - **directory** → the explorer navigates there, staying in the app.
  * - **any other file** → revealed in File Explorer, *not* launched. Opening a path should never be
  *   the same as running whatever program claims that extension; that is the behaviour being fixed,
@@ -45,7 +47,11 @@ export async function openTarget(raw: string, cwd?: string): Promise<void> {
   }
   const kind = viewerKindFor(basename(target.path));
   if (kind) {
-    useWorkspace.getState().openViewerTab(target.path, kind);
+    const ws = useWorkspace.getState();
+    // Split beside the pane that produced the link — a document opened from terminal output is almost
+    // always read *against* that output. Falls back to a tab when we don't know which pane asked.
+    if (ws.activePaneId) ws.splitPaneWith(ws.activePaneId, "row", makeViewerLeaf(target.path, kind));
+    else ws.openViewerTab(target.path, kind);
     return;
   }
   await revealItemInDir(target.path);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
+import { entryDragProps } from "./useEntryDrag";
 import { listDir, type Entry } from "../../lib/tauri";
 import { basename, viewerKindFor } from "../workspace/model";
 import { sortEntries, useActiveCwd } from "./util";
@@ -94,6 +95,7 @@ function Node({
       <div
         className={"row" + (entry.hidden ? " dim" : "")}
         style={{ paddingLeft: 6 + depth * 12 }}
+        {...entryDragProps(entry.path, entry.isDir)}
         onClick={() => onToggle(entry)}
         onContextMenu={(e) => onMenu(e, entry)}
         title={entry.path}
