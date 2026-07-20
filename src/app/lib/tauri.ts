@@ -36,6 +36,16 @@ export async function readFile(path: string): Promise<string> {
 /** Read a file's bytes as base64 — for inlining a document's relative images as data URIs. */
 export const readFileBase64 = (path: string) => invoke<string>("read_file_base64", { path });
 
+export type LinkTarget = { path: string; isDir: boolean; line: number | null };
+
+/**
+ * Resolve a candidate path found in terminal output, relative to a pane's cwd. `null` when it does
+ * not exist — the link provider uses that to decide whether to underline at all, so a line of prose
+ * that merely looks like a path never becomes a link.
+ */
+export const resolveLinkTarget = (base: string | undefined, raw: string) =>
+  invoke<LinkTarget | null>("resolve_link_target", { base: base ?? null, raw });
+
 /**
  * Start a shell and stream its output.
  *

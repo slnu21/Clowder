@@ -3,6 +3,7 @@ pub mod beacon_install;
 pub mod conpty_check;
 pub mod correlate;
 pub mod fs_ops;
+pub mod link;
 pub mod liveness;
 pub mod pty;
 pub mod quote;
@@ -53,6 +54,7 @@ pub fn run() {
             fs_ops::default_root,
             fs_ops::read_file,
             fs_ops::read_file_base64,
+            link::resolve_link_target,
             quote::quote_path_cmd,
             sessions::sessions_snapshot,
             settings::get_settings,

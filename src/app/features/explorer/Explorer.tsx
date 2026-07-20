@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
 import type { Entry } from "../../lib/tauri";
 import SettingsPopover from "../settings/SettingsPopover";
 import { viewerKindFor } from "../workspace/model";
 import FolderNav from "./FolderNav";
+import { useExplorer } from "./store";
 import WorkspaceTree from "./WorkspaceTree";
 
 /**
@@ -23,6 +24,13 @@ export default function Explorer({
 }) {
   const [tab, setTab] = useState<"explorer" | "workspace">("explorer");
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null);
+  const request = useExplorer((s) => s.request);
+
+  // A folder revealed from elsewhere has to bring its tab with it — FolderNav is unmounted while
+  // workspace is showing, so the request would land nowhere.
+  useEffect(() => {
+    if (request) setTab("explorer");
+  }, [request]);
 
   const openMenu = (e: React.MouseEvent, entry: Entry) => {
     e.preventDefault();

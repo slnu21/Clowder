@@ -2,7 +2,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { copyText, pasteText } from "../../lib/clipboard";
-import { ptyClose, ptyResize, ptySpawn, ptyWrite } from "../../lib/tauri";
+import { openTarget } from "../../lib/openTarget";
+import { ptyClose, ptyResize, ptySpawn, ptyWrite, resolveLinkTarget } from "../../lib/tauri";
 import { resolveShell } from "../../lib/settings";
 import { useSettings } from "../settings/store";
 
@@ -120,6 +121,105 @@ function clipboardKeys(term: Xterm): (e: KeyboardEvent) => boolean {
   };
 }
 
+/**
+ * URLs and filesystem paths in terminal output, made clickable.
+ *
+ * There was no link handling at all before this: no matchers, and — the part that produced the
+ * complaint — no `linkHandler`, so OSC 8 hyperlinks (the ones a program emits explicitly) fell through
+ * to xterm's default, which is `window.open`. In a webview that means the OS opens it, so clicking a
+ * `.md` path launched VS Code. Setting `linkHandler` is what closes that escape hatch; the two
+ * matchers are what make plain text clickable in the first place.
+ *
+ * Paths are validated against the filesystem before they become links (`resolveLinkTarget` returns
+ * null for anything that isn't there), which is why `provideLinks` is worth its async callback:
+ * `and/or` in a sentence looks exactly like a relative path, and underlining it would be noise.
+ */
+function registerLinks(term: Xterm, cwd: () => string | undefined): void {
+  const open = (text: string) => void openTarget(text, cwd());
+
+  // Explicit OSC 8 hyperlinks. `range`/`text` are xterm's; the URI is what the program declared.
+  term.options.linkHandler = {
+    activate: (_event, uri) => open(uri),
+  };
+
+  term.registerLinkProvider({
+    provideLinks(y, cb) {
+      const row = readRow(term, y);
+      if (!row) return cb(undefined);
+      cb(matches(row, URL_RE, y).map((m) => ({ ...m, activate: () => open(m.text) })));
+    },
+  });
+
+  term.registerLinkProvider({
+    provideLinks(y, cb) {
+      const row = readRow(term, y);
+      if (!row) return cb(undefined);
+      const found = matches(row, PATH_RE, y).filter((m) => !URL_RE.test(m.text));
+      if (found.length === 0) return cb(undefined);
+      // Ask Rust which of these actually exist, then offer only those.
+      void Promise.all(found.map((m) => resolveLinkTarget(cwd(), m.text))).then((targets) =>
+        cb(found.filter((_, i) => targets[i]).map((m) => ({ ...m, activate: () => open(m.text) }))),
+      );
+    },
+  });
+}
+
+/**
+ * One row as text, plus the cell each character sits in.
+ *
+ * `translateToString` would be shorter and wrong here: a Hangul syllable is one character but two
+ * cells, so on any line containing Korean — which, in a Claude Code pane, is most of them — string
+ * offsets stop matching column numbers and the underline drifts left of the link. Walking the cells
+ * is the only way to keep the two coordinate systems tied together.
+ */
+function readRow(term: Xterm, y: number): { text: string; startCell: number[]; endCell: number[] } | null {
+  const line = term.buffer.active.getLine(y - 1);
+  if (!line) return null;
+  let text = "";
+  const startCell: number[] = [];
+  const endCell: number[] = [];
+  for (let x = 0; x < line.length; x++) {
+    const cell = line.getCell(x);
+    if (!cell) continue;
+    const width = cell.getWidth();
+    if (width === 0) continue; // the trailing half of a wide character — already accounted for
+    const chars = cell.getChars() || " ";
+    for (const ch of chars) {
+      text += ch;
+      startCell.push(x);
+      endCell.push(x + width - 1);
+    }
+  }
+  return text.trim() ? { text, startCell, endCell } : null;
+}
+
+/** Regex hits on one row, as xterm link ranges (1-based columns, inclusive on both ends). */
+function matches(row: { text: string; startCell: number[]; endCell: number[] }, re: RegExp, y: number) {
+  const out: { text: string; range: { start: { x: number; y: number }; end: { x: number; y: number } } }[] = [];
+  re.lastIndex = 0; // the `g` flag makes these stateful, and the same instance is reused every row
+  for (let m = re.exec(row.text); m; m = re.exec(row.text)) {
+    const last = m.index + m[0].length - 1;
+    out.push({
+      text: m[0],
+      range: {
+        start: { x: row.startCell[m.index] + 1, y },
+        end: { x: row.endCell[last] + 1, y },
+      },
+    });
+  }
+  return out;
+}
+
+/** http(s)/mailto. Trailing punctuation is left to `openTarget`'s trimming, not the pattern. */
+const URL_RE = /\b(?:https?:\/\/|mailto:)[^\s<>"'`]+/g;
+
+/**
+ * Path-shaped text: a drive-rooted or MSYS-rooted absolute path, or a relative one with a separator
+ * (so a bare word is never a candidate). An optional `:line:col` tail rides along because that is how
+ * every tool — including Claude Code — prints a location.
+ */
+const PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|\/)?(?:[\w.~%$@+-]+[\\/])+[\w.~%$@+-]+(?::\d+){0,2}/g;
+
 export function acquire(leafId: string, cwd?: string): PoolEntry {
   const existing = pool.get(leafId);
   if (existing) return existing;
@@ -137,6 +237,9 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.attachCustomKeyEventHandler(clipboardKeys(term));
+  // `cwd` as a thunk, not a value: it is the pane's launch directory today, but once panes can be
+  // moved and re-targeted the resolver should follow whatever the leaf currently says.
+  registerLinks(term, () => cwd);
   term.open(el);
 
   const entry: PoolEntry = { term, fit, el, ptyId: null, released: false };
