@@ -116,6 +116,10 @@ export default function Icon({
   return (
     <svg
       className={"icon" + (className ? " " + className : "")}
+      // The `width`/`height` attributes stay as the unscaled fallback; CSS wins over SVG presentation
+      // attributes, so `.icon`'s `calc(var(--icon-size) * var(--ui-scale))` scales all 25-odd call sites
+      // without any of them changing.
+      style={{ "--icon-size": size } as React.CSSProperties}
       width={size}
       height={size}
       viewBox="0 0 24 24"

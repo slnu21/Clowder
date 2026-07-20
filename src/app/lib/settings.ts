@@ -13,6 +13,8 @@ export type Settings = {
   theme: "dark" | "light";
   /** Accent key: amber | sage | clay | neutral. Applied as `data-accent`; everything derives from --accent. */
   accent: string;
+  /** Chrome scale, 0.9–1.5. Multiplies every size token; the terminal is a separate axis. */
+  uiScale: number;
   /** Is the left panel (explorer/workspace) shown? */
   leftPanel: boolean;
   /**
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   favorites: [],
   theme: "dark",
   accent: "amber",
+  uiScale: 1,
   leftPanel: true,
   rightRail: null,
 };

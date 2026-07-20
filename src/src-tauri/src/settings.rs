@@ -27,6 +27,8 @@ pub struct Settings {
     /// Accent key: `"amber"` | `"sage"` | `"clay"` | `"neutral"`. The whole UI derives from one
     /// `--accent` token, so this single choice re-tints everything (theme-tuned in CSS).
     pub accent: String,
+    /// Chrome scale, 0.9–1.5. Multiplies every CSS size token; the terminal has its own font size.
+    pub ui_scale: f32,
     /// Is the left panel (explorer/workspace) shown?
     pub left_panel: bool,
     /// Right session rail: `"full"` | `"mini"` | `"hidden"`, or `None` for **never chosen**.
@@ -50,6 +52,7 @@ impl Default for Settings {
             favorites: Vec::new(),
             theme: "dark".into(),
             accent: "amber".into(),
+            ui_scale: 1.0,
             left_panel: true,
             right_rail: None,
         }
