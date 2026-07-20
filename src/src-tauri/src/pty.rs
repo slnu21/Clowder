@@ -94,7 +94,25 @@ fn build_command(shell: &str, cwd: Option<&str>) -> CommandBuilder {
     if let Some(d) = cwd {
         cmd.cwd(d);
     }
+    describe_terminal(&mut cmd);
     cmd
+}
+
+/// Tell the child what terminal it is talking to.
+///
+/// A GUI process has no console, so it has no `TERM`/`COLORTERM` to pass down, and `CommandBuilder`
+/// inherits our environment — which meant every shell we spawned started out claiming to be nothing in
+/// particular. Programs that probe for colour support then fall back to their most conservative path:
+/// 16 colours, or none. Claude Code's own renderer is one of them, which is part of why its message
+/// styling came out flat for some people. Ours *is* a 24-bit xterm-compatible terminal, so say so.
+///
+/// `TERM_PROGRAM` is the conventional way an emulator identifies itself; tools use it to enable
+/// terminal-specific behaviour (Claude Code reads it to pick its key bindings, among others).
+fn describe_terminal(cmd: &mut CommandBuilder) {
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    cmd.env("TERM_PROGRAM", "Clowder");
+    cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
 }
 
 #[tauri::command]
@@ -234,6 +252,26 @@ pub fn default_shell() -> String {
         }
     }
     "powershell.exe".into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The whole point of `describe_terminal` is that it survives every shell branch — a child that
+    /// doesn't know it has 24-bit colour renders differently, and that is invisible until someone
+    /// notices their prompt looks wrong.
+    #[test]
+    fn every_shell_gets_terminal_env() {
+        for shell in ["C:/Git/bin/bash.exe", "powershell.exe", "pwsh.exe", "cmd.exe"] {
+            let cmd = build_command(shell, None);
+            let got = |k: &str| cmd.get_env(k).and_then(|v| v.to_str()).map(str::to_owned);
+            assert_eq!(got("TERM").as_deref(), Some("xterm-256color"), "TERM for {shell}");
+            assert_eq!(got("COLORTERM").as_deref(), Some("truecolor"), "COLORTERM for {shell}");
+            assert_eq!(got("TERM_PROGRAM").as_deref(), Some("Clowder"), "TERM_PROGRAM for {shell}");
+            assert!(got("TERM_PROGRAM_VERSION").is_some(), "TERM_PROGRAM_VERSION for {shell}");
+        }
+    }
 }
 
 /// Spawn a shell, run one command, and return its raw output bytes. Used by `--selftest` to prove
