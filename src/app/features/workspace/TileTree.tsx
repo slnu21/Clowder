@@ -58,8 +58,17 @@ async function dropEntry(
 export default function TileTree({ node }: { node: Node }) {
   if (node.kind === "leaf") return <PaneFrame leaf={node} />;
 
+  // Allotment measures its children once on mount and never reconciles a changed child set — add,
+  // remove, reorder or a flipped orientation all leave the old layout on screen until it remounts (which
+  // is why switching tabs "fixed" a move, and why closing a pane could blank the survivors). Keying it on
+  // the structure — orientation + child ids in order — remounts it exactly when the shape changes and
+  // never merely on a divider drag (sizes aren't in the key). Pooled terminals survive the remount, so
+  // the shells keep running; `preferredSize` restores the proportions from the (permuted) sizes.
+  const structureKey = node.dir + ":" + node.children.map((c) => c.id).join(",");
+
   return (
     <Allotment
+      key={structureKey}
       vertical={node.dir === "column"}
       onChange={(sizes) => useWorkspace.getState().updateSizes(node.id, sizes)}
     >

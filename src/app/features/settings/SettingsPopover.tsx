@@ -36,8 +36,10 @@ export default function SettingsPopover() {
     const place = () => {
       const g = gearRef.current?.getBoundingClientRect();
       if (!g) return;
-      const width = 292;
+      // Must track the CSS width, which scales with --ui-scale — otherwise the viewport clamp uses the
+      // wrong width and the (now wider) popover spills off the right edge at high scales.
       const margin = 8;
+      const width = Math.min(292 * s.uiScale, window.innerWidth * 0.92);
       setPos({
         top: g.bottom + 6,
         left: Math.min(Math.max(margin, g.left), window.innerWidth - width - margin),
@@ -46,7 +48,7 @@ export default function SettingsPopover() {
     place();
     window.addEventListener("resize", place);
     return () => window.removeEventListener("resize", place);
-  }, [openState]);
+  }, [openState, s.uiScale]);
 
   useEffect(() => {
     if (!openState) return;
@@ -133,7 +135,9 @@ export default function SettingsPopover() {
             </div>
           </div>
 
-          <div className="set-row">
+          {/* Full-width row: five presets don't fit beside a label, so the segment gets its own line and
+              the buttons share the width evenly. */}
+          <div className="set-row set-col">
             <span>UI 크기</span>
             {/* Presets, not a free number: 1.37 lands no step on a whole pixel and the hinting turns to
                 mush. Chrome only — the terminal keeps its own font size. */}
