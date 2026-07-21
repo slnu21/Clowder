@@ -257,6 +257,14 @@ button {
   min-height: 0;
 }
 
+/* Pin each pane to its column. Without this, hiding the explorer with `display: none` drops it from the
+   grid entirely and auto-placement slides the *workspace* into the now-0px first track while the rail
+   claims the `1fr` — the terminal vanishes and the session pane balloons. Explicit columns keep every
+   surviving pane in its own track no matter which sibling is collapsed. */
+.deck > .explorer { grid-column: 1; }
+.deck > .workspace { grid-column: 2; }
+.deck > .sessions { grid-column: 3; }
+
 /* Collapsed columns need `display: none` on the pane itself, not just a 0 width — a zero-width pane
    still paints its 1px border, which reads as a stray line down the window. */
 .deck[data-left="off"] { --w-left: 0px; }
@@ -353,7 +361,10 @@ button {
 
 .side-tab {
   display: flex;
+  /* Each tab takes an equal share of the strip (minus the gear) instead of hugging the left. */
+  flex: 1;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 0 12px;
   border: 0;
@@ -519,9 +530,13 @@ button {
 .settings-pop {
   position: fixed;
   z-index: 1000;
-  width: 292px;
-  max-height: 78vh;
+  /* Scale the popover with the UI: its contents grow with `--ui-scale`, so a fixed width would clip
+     them at higher scales. Capped to the viewport so it never runs off-screen. */
+  width: calc(292px * var(--ui-scale));
+  max-width: 92vw;
+  max-height: 88vh;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px 14px 14px;
   border: 1px solid var(--line-2);
   border-radius: 10px;
@@ -568,7 +583,9 @@ button {
 
 .set-row input[type="number"] { width: 72px; text-align: right; font-family: var(--mono); }
 
-.set-pathpick { display: flex; flex: 1; gap: 4px; }
+/* `min-width: 0` lets the field shrink within its row — without it a flex item keeps its content's min
+   width and spills past the popover's right edge when the label beside it is wide ("Git Bash 경로"). */
+.set-pathpick { display: flex; flex: 1; min-width: 0; gap: 4px; }
 .set-pathpick input { flex: 1; }
 
 .set-pathpick button,
@@ -599,6 +616,9 @@ button {
 }
 .set-seg button + button { border-left: 1px solid var(--line-2); }
 .set-seg button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+/* A segment on its own full-width row (UI scale): span it and let the buttons share the width evenly. */
+.set-col .set-seg { width: 100%; }
+.set-col .set-seg button { flex: 1; padding: 5px 4px; text-align: center; }
 
 /* Accent swatch picker. */
 .set-accent { display: flex; gap: 8px; }
@@ -1057,7 +1077,15 @@ button {
   background: var(--bg-raised);
   color: var(--text-3);
   font-size: var(--fs-xs);
+  /* The header is the drag handle for the pane — say so. Without a grab cursor there's no hint the
+     pane can be moved at all, which is the "how do I even do this?" problem. */
+  cursor: grab;
 }
+.tile-head:active { cursor: grabbing; }
+/* The controls are click targets, not part of the handle. */
+.tile-head .tile-title { cursor: grab; }
+.tile-actions,
+.tile-actions button { cursor: default; }
 
 /* Automatic colour is an edge and nothing more: a tiled screen shouldn't look like a paint chart.
    The fill is reserved for a colour the user actually chose. */
