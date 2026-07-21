@@ -64,11 +64,13 @@ fn statusline_round_trip() -> (bool, String) {
     let payload = format!(
         r#"{{"session_id":"{PROBE_SESSION}","context_window":{{"used_percentage":42.5,"total_input_tokens":1,"total_output_tokens":1,"context_window_size":2}}}}"#
     );
+    use std::os::windows::process::CommandExt as _;
     let spawned = std::process::Command::new(&exe)
         .args(["--beacon", "--statusline"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped()) // the user's original line, if any — not ours to print
         .stderr(std::process::Stdio::null())
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW — consistent with beacon.rs run_original
         .spawn();
     let Ok(mut child) = spawned else {
         return (false, "could not spawn --beacon --statusline".into());

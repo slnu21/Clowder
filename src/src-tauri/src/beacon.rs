@@ -14,8 +14,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// `CREATE_NO_WINDOW` — the beacon is a windowless (GUI-subsystem) process, so spawning a **console**
+/// child (Git Bash) without this flag makes Windows allocate a brand-new console window that flashes on
+/// screen. Since the statusline delegate runs on every render, that flash is constant. This suppresses it.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 use windows::Win32::Foundation::{CloseHandle, FILETIME};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
@@ -254,6 +260,7 @@ fn run_original(cmd: &str, raw: &[u8]) {
     let Ok(mut child) = std::process::Command::new(&shell)
         .args(&args)
         .stdin(std::process::Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW) // no flashing console window on every statusline render
         .spawn()
     else {
         return;
