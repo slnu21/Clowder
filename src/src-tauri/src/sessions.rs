@@ -86,6 +86,9 @@ struct Session {
     dead_since: Option<Instant>,
     status: String,
     status_since: Option<String>,
+    /// The session's `.jsonl` transcript — its mtime tells us whether Claude resumed work after a
+    /// permission prompt (see `demote_stale_permission`).
+    transcript_path: Option<String>,
     cwd: Option<String>,
     message: Option<String>,
     tool_name: Option<String>,
@@ -101,6 +104,7 @@ impl Session {
     fn apply(&mut self, r: &SessionRecord) {
         self.status = normalize_status(r.status.as_deref());
         self.status_since = r.status_since.clone();
+        self.transcript_path = r.transcript_path.clone();
         self.cwd = r.cwd.clone();
         self.message = r.message.clone();
         self.tool_name = r.tool_name.clone();
@@ -266,7 +270,11 @@ fn assemble(
         .sessions
         .iter()
         .map(|(id, s)| {
-            let status = if s.dead { "dead".to_string() } else { s.status.clone() };
+            let status = if s.dead {
+                "dead".to_string()
+            } else {
+                demote_stale_permission(&s.status, s.status_since.as_deref(), s.transcript_path.as_deref())
+            };
             SessionView {
                 session_id: id.clone(),
                 rank: status_rank(&status),
@@ -331,6 +339,61 @@ fn status_rank(s: &str) -> u8 {
     }
 }
 
+/// Clear a stale `awaiting_permission` for display.
+///
+/// When a permission prompt fires, the beacon writes `awaiting_permission`. But **no hook fires when the
+/// user approves** (Claude Code has no "approved" event), so the spool stays `awaiting_permission` until
+/// the next `Stop`/`UserPromptSubmit` — which can be minutes for a long tool run. Meanwhile Claude is
+/// actually working, and the rail keeps shouting 승인 대기.
+///
+/// The signal that approval happened is the **transcript advancing**: Claude appends to its `.jsonl` as
+/// it runs the (approved) tool and resumes, and it appends nothing while blocked on the prompt. So if the
+/// transcript's mtime is past `statusSince`, show 동작 중 instead. A pure display transform — re-evaluated
+/// every tick, so a genuinely-still-waiting session (transcript idle) keeps 승인 대기, and a fresh spool
+/// status (`Stop` → awaiting_input) still wins on the next apply. Fail-soft: no transcript or unparseable
+/// timestamp leaves the status untouched. Cheap: the file stat runs only for a session in the permission
+/// state, which is rare.
+fn demote_stale_permission(status: &str, status_since: Option<&str>, transcript: Option<&str>) -> String {
+    if status != "awaiting_permission" {
+        return status.to_string();
+    }
+    match (status_since.and_then(parse_iso_secs), transcript.and_then(file_mtime_secs)) {
+        // Strictly newer (both are second-precision): the tool_use line was written *before* the prompt,
+        // so `>` requires a genuine post-approval write and never trips on the prompt itself.
+        (Some(since), Some(mtime)) if mtime > since => "working".to_string(),
+        _ => status.to_string(),
+    }
+}
+
+/// A file's mtime as unix seconds (UTC), or `None` if it can't be read.
+fn file_mtime_secs(path: &str) -> Option<i64> {
+    let m = std::fs::metadata(path).ok()?.modified().ok()?;
+    m.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs() as i64)
+}
+
+/// Parse the beacon's ISO timestamp (`YYYY-MM-DDTHH:MM:SSZ`, UTC, second precision — the exact inverse of
+/// `beacon::unix_to_iso`) to unix seconds. `None` on any shape mismatch.
+fn parse_iso_secs(s: &str) -> Option<i64> {
+    if s.len() < 19 {
+        return None;
+    }
+    let n = |a: usize, z: usize| s.get(a..z)?.parse::<i64>().ok();
+    let (y, mo, d) = (n(0, 4)?, n(5, 7)?, n(8, 10)?);
+    let (h, mi, se) = (n(11, 13)?, n(14, 16)?, n(17, 19)?);
+    Some(days_from_civil(y, mo, d) * 86_400 + h * 3600 + mi * 60 + se)
+}
+
+/// Howard Hinnant's `days_from_civil`: (year, month, day) → days since 1970-01-01. Inverse of
+/// `beacon::civil_from_days`.
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = (if y >= 0 { y } else { y - 399 }) / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146_097 + doe - 719_468
+}
+
 fn project_name(cwd: Option<&str>) -> String {
     match cwd {
         Some(c) if !c.is_empty() => {
@@ -347,5 +410,53 @@ fn kilo(n: i64) -> String {
         format!("{:.1}k", n as f64 / 1000.0)
     } else {
         n.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn iso_parse_is_the_inverse_of_unix_to_iso() {
+        // Round-trip a spread of instants, incl. epoch and the 4-digit-year ceiling.
+        for t in [0i64, 1_000_000_000, 1_753_274_275, 1_800_000_000, 253_402_300_799] {
+            assert_eq!(parse_iso_secs(&crate::beacon::unix_to_iso(t)), Some(t), "round-trip {t}");
+        }
+        assert_eq!(parse_iso_secs("not-a-date"), None);
+        assert_eq!(parse_iso_secs("2026-07-23"), None); // too short to carry a time
+    }
+
+    #[test]
+    fn demote_only_clears_a_stale_permission() {
+        // Anything but awaiting_permission is returned verbatim.
+        assert_eq!(demote_stale_permission("working", Some("2000-01-01T00:00:00Z"), None), "working");
+        assert_eq!(demote_stale_permission("awaiting_input", None, None), "awaiting_input");
+
+        let dir = std::env::temp_dir().join("clowder-test-demote");
+        let _ = std::fs::create_dir_all(&dir);
+        let tx = dir.join("transcript.jsonl");
+        std::fs::write(&tx, b"{}").unwrap(); // mtime ~= now
+        let txs = tx.to_string_lossy();
+
+        // Prompt fired long ago, transcript written just now → Claude resumed → 동작 중.
+        assert_eq!(
+            demote_stale_permission("awaiting_permission", Some("2000-01-01T00:00:00Z"), Some(&txs)),
+            "working"
+        );
+        // statusSince in the far future (transcript older) → genuinely still waiting.
+        assert_eq!(
+            demote_stale_permission("awaiting_permission", Some("2999-01-01T00:00:00Z"), Some(&txs)),
+            "awaiting_permission"
+        );
+        // Fail-soft: no transcript, no timestamp, or a missing file all leave the status untouched.
+        assert_eq!(demote_stale_permission("awaiting_permission", Some("2000-01-01T00:00:00Z"), None), "awaiting_permission");
+        assert_eq!(demote_stale_permission("awaiting_permission", None, Some(&txs)), "awaiting_permission");
+        assert_eq!(
+            demote_stale_permission("awaiting_permission", Some("2000-01-01T00:00:00Z"), Some("C:/nonexistent/x.jsonl")),
+            "awaiting_permission"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

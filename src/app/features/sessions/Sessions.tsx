@@ -14,7 +14,7 @@ import {
 
 const STATUS_LABEL: Record<string, string> = {
   awaiting_permission: "승인 대기",
-  awaiting_input: "내 차례",
+  awaiting_input: "대기 중",
   working: "동작 중",
   idle: "유휴",
   dead: "종료됨",

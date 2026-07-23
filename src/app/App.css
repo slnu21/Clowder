@@ -133,7 +133,9 @@
 
   --text-1: #262420;
   --text-2: #56534c;
-  --text-3: #8a867c;
+  /* Muted labels must still clear WCAG AA on paper: #8a867c was ~3.2–3.6:1 on the light panels (fail).
+     #6f6b61 is ≈4.7:1 on --bg-raised and ≈5.3:1 on white, and stays a rung above --text-2. */
+  --text-3: #6f6b61;
 
   --accent: #9c6f2e;
   --on-accent: #ffffff;
