@@ -520,6 +520,16 @@ button {
 .ctx button:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
 .ctx button:disabled { color: var(--text-3); }
 
+/* Terminal right-click menu: the `.ctx` base plus a non-interactive hint line (Shift+drag discovery). */
+.ctx-hint {
+  padding: 6px 14px 7px;
+  margin-top: 2px;
+  border-top: 1px solid var(--line-1);
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
+}
+
 /* ── settings popover ─────────────────────────────────── */
 .settings-wrap { position: relative; margin-left: auto; }
 
