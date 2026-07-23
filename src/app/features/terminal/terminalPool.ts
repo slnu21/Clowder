@@ -50,12 +50,17 @@ const ptyToLeaf = new Map<number, string>();
 function xtermTheme(): ITheme {
   const rs = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => rs.getPropertyValue(name).trim() || fallback;
-  const light = useSettings.getState().settings.theme === "light";
+  // Terminal theme is its **own** axis (follow the app, or pin dark/light — default dark). The palette
+  // tokens below resolve through `data-term-theme`, not `data-theme`, so a light app can still run a
+  // dark, readable terminal. `light` only picks the first-paint fallbacks; the CSS vars win once set.
+  const s = useSettings.getState().settings;
+  const tt = s.terminalTheme ?? "dark";
+  const light = (tt === "follow" ? s.theme : tt) === "light";
   const bg = v("--bg-inset", light ? "#f3f1ec" : "#0f0f0e");
   const ansi = (name: string, dark: string, lit: string) => v(`--ansi-${name}`, light ? lit : dark);
   return {
     background: bg,
-    foreground: v("--text-1", light ? "#262420" : "#e8e6e1"),
+    foreground: v("--term-fg", light ? "#262420" : "#e8e6e1"),
     cursor: v("--accent", "#c8a15c"),
     cursorAccent: bg,
     selectionBackground: light ? "rgba(38,36,32,0.16)" : "rgba(232,230,225,0.16)",

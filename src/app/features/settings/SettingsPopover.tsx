@@ -198,6 +198,23 @@ export default function SettingsPopover() {
 
           <div className="set-group">터미널</div>
 
+          <div className="set-row" title="터미널 색은 앱 테마와 별개입니다. 대부분의 CLI 색상표가 어두운 배경 기준이라 라이트 앱에서도 다크 터미널이 잘 보입니다.">
+            <span>테마</span>
+            <div className="set-seg">
+              {(["follow", "dark", "light"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={s.terminalTheme === k}
+                  className={s.terminalTheme === k ? "on" : ""}
+                  onClick={() => update({ terminalTheme: k })}
+                >
+                  {k === "follow" ? "앱 따라" : k === "dark" ? "다크" : "라이트"}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <label className="set-row">
             <span>글꼴</span>
             <input

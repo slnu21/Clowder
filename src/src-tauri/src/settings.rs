@@ -24,6 +24,10 @@ pub struct Settings {
     pub favorites: Vec<String>,
     /// UI theme: `"dark"` | `"light"`. Applied as `data-theme` on the document root.
     pub theme: String,
+    /// Terminal palette, a separate axis from `theme`: `"follow"` | `"dark"` | `"light"`. Default
+    /// `"dark"` — most CLI/TUI colour schemes (incl. truecolor the app can't re-map) assume a dark
+    /// background, so a light app can keep a readable terminal. Applied as `data-term-theme`.
+    pub terminal_theme: String,
     /// Accent key: `"amber"` | `"sage"` | `"clay"` | `"neutral"`. The whole UI derives from one
     /// `--accent` token, so this single choice re-tints everything (theme-tuned in CSS).
     pub accent: String,
@@ -51,6 +55,7 @@ impl Default for Settings {
             start_path: None,
             favorites: Vec::new(),
             theme: "dark".into(),
+            terminal_theme: "dark".into(),
             accent: "amber".into(),
             ui_scale: 1.0,
             left_panel: true,

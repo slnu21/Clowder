@@ -11,6 +11,13 @@ export type Settings = {
   favorites: string[];
   /** UI theme. Applied as `data-theme` on the document root. */
   theme: "dark" | "light";
+  /**
+   * Terminal palette, a **separate axis** from the UI theme (applied as `data-term-theme`). `"follow"`
+   * tracks `theme`; `"dark"`/`"light"` pin it. Default `"dark"`: most CLI/TUI colour schemes — including
+   * the truecolor output the app can't re-map — assume a dark background, so a light app can still keep a
+   * readable terminal.
+   */
+  terminalTheme: TerminalTheme;
   /** Accent key: amber | sage | clay | neutral. Applied as `data-accent`; everything derives from --accent. */
   accent: string;
   /** Chrome scale, 0.9–1.5. Multiplies every size token; the terminal is a separate axis. */
@@ -26,6 +33,7 @@ export type Settings = {
 };
 
 export type RailMode = "full" | "mini" | "hidden";
+export type TerminalTheme = "follow" | "dark" | "light";
 
 export const DEFAULT_SETTINGS: Settings = {
   gitBashPath: null,
@@ -36,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   startPath: null,
   favorites: [],
   theme: "dark",
+  terminalTheme: "dark",
   accent: "amber",
   uiScale: 1,
   leftPanel: true,

@@ -12,9 +12,16 @@ import { retheme } from "../terminal/terminalPool";
 
 /** Reflect theme + accent onto the document root; every CSS token (and the terminal palette) derives
  * from `data-theme` / `data-accent` / the resulting `--accent`. One write re-tints the whole app. */
+/** Terminal theme resolved to a concrete dark/light (follow → the app theme). */
+function termTheme(s: Settings): "dark" | "light" {
+  return s.terminalTheme === "follow" ? s.theme : s.terminalTheme;
+}
+
 function applyAppearance(s: Settings): void {
   const root = document.documentElement;
   root.setAttribute("data-theme", s.theme);
+  // The terminal palette is its own axis — a light app can keep a dark terminal (see App.css / xtermTheme).
+  root.setAttribute("data-term-theme", termTheme(s));
   root.setAttribute("data-accent", s.accent);
   // Every size token is `calc(Npx * var(--ui-scale))`, so one write resizes the whole chrome. The
   // terminal is deliberately untouched — its size is `terminalFontSize`, a separate axis.
@@ -45,10 +52,14 @@ export const useSettings = create<State>((set, get) => ({
     set({ settings: next });
     void saveSettings(next);
     const themed = next.theme !== prev.theme || next.accent !== prev.accent;
-    if (themed || next.uiScale !== prev.uiScale) {
+    // The terminal palette flips when its own axis changes, or when it follows the app and the app theme
+    // moved. (Accent also re-tints the cursor, hence `themed`.)
+    const termFlipped =
+      termTheme(next) !== termTheme(prev) || next.accent !== prev.accent;
+    if (themed || termFlipped || next.uiScale !== prev.uiScale) {
       applyAppearance(next);
       // Scale alone never touches the terminal palette, so don't pay for a re-theme of every terminal.
-      if (themed) retheme(); // live terminals keep running; only their palette flips
+      if (termFlipped) retheme(); // live terminals keep running; only their palette flips
     }
   },
 }));
