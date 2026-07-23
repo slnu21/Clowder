@@ -807,6 +807,44 @@ button {
 }
 .track-off:hover:not(:disabled) { background: var(--hover); color: var(--text-2); }
 
+/* Beacon install location — surfaced so "where did it go?" has an answer (item 3). */
+.track-loc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 10px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-1);
+  border-radius: 6px;
+  font-size: var(--fs-2xs);
+}
+.track-loc-label { flex: none; color: var(--text-3); }
+.track-loc-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl; /* keep the tail (…\.clowder\bin) visible when the path is long */
+  text-align: left;
+  color: var(--text-2);
+  font-family: var(--mono);
+}
+.track-loc-open {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-2xs);
+}
+.track-loc-open:hover { background: var(--hover); color: var(--text-1); }
+/* No exe at the referenced path — the CLI can't find the beacon. */
+.track-loc-warn { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.track-loc-warn .track-loc-label { color: var(--warn); }
+
 .session {
   padding: 9px 10px;
   border: 1px solid var(--line-1);
