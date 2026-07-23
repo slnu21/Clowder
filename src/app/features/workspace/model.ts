@@ -44,9 +44,19 @@ export type Tab = {
   root: Node;
 };
 
+/**
+ * A random per-load tag mixed into every id. The counter alone keeps ids short and debuggable, but it is
+ * module-local: if this module is ever re-evaluated while the store's state survives (a dev/HMR reload,
+ * or two module copies), the counter restarts at 0 and re-issues `p1`, `p2`… on top of leaves that are
+ * still on screen. A duplicate leaf id is exactly what makes `removeLeaf` drop a sibling and what makes
+ * React collapse two `Allotment.Pane`s onto one key — i.e. the "closing one split closes another" bug.
+ * The tag makes a fresh evaluation's ids disjoint from the old ones, so a collision can't happen. Still
+ * short and readable: `p3` becomes `p3.k7f`.
+ */
+const ID_TAG = Math.random().toString(36).slice(2, 6);
 let counter = 0;
-/** Monotonic per-session id. A counter (not a UUID) keeps ids short and debuggable in the DOM. */
-export const nextId = (prefix: string): string => `${prefix}${++counter}`;
+/** Monotonic per-session id, tagged so a re-evaluated module can't collide with live ids. */
+export const nextId = (prefix: string): string => `${prefix}${++counter}.${ID_TAG}`;
 
 /** Last path segment, for a terminal tab/pane title. Handles both separators and trailing slashes. */
 export function basename(p: string): string {
@@ -162,9 +172,26 @@ export function setLeafProps(node: Node, targetId: string, patch: Partial<Leaf>)
  * split so the survivors redistribute evenly.
  */
 export function removeLeaf(node: Node, targetId: string): Node | undefined {
-  if (node.kind === "leaf") return node.id === targetId ? undefined : node;
+  return pruneOne(node, targetId, { done: false });
+}
+
+/**
+ * Remove the **first** leaf matching `targetId` and collapse the split it emptied. Single-target by
+ * design (the `done` flag): ids are unique so there is only ever one match — but should a duplicate id
+ * ever slip in, removing just one keeps a stray dup from taking a live sibling (or the whole tab) down
+ * with it. That cascade is the "closing one split closes another" failure, made structurally impossible
+ * here even if the id guarantee is somehow violated upstream.
+ */
+function pruneOne(node: Node, targetId: string, done: { done: boolean }): Node | undefined {
+  if (node.kind === "leaf") {
+    if (!done.done && node.id === targetId) {
+      done.done = true;
+      return undefined;
+    }
+    return node;
+  }
   const kids = node.children
-    .map((c) => removeLeaf(c, targetId))
+    .map((c) => pruneOne(c, targetId, done))
     .filter((c): c is Node => c !== undefined);
   if (kids.length === 0) return undefined;
   if (kids.length === 1) return kids[0];

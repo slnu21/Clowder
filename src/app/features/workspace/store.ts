@@ -249,3 +249,17 @@ export const useWorkspace = create<State>((set, get) => ({
     }));
   },
 }));
+
+// Dev safety net for item 1 ("closing one split closes another"). A duplicate pane id is the shared root
+// of both failure modes — it makes `removeLeaf` drop a sibling and makes React collapse two
+// `Allotment.Pane`s onto one key. ids are minted to be unique (`model.nextId`) and `removeLeaf` is
+// single-target, so this must never fire; if it ever does in dev, it prints the offending ids so the real
+// source can be chased rather than the symptom.
+if (import.meta.env.DEV) {
+  useWorkspace.subscribe((s) => {
+    const ids = s.tabs.flatMap((t) => collectLeafIds(t.root));
+    if (new Set(ids).size !== ids.length) {
+      console.error("[workspace] duplicate pane id detected — a close could cascade:", ids);
+    }
+  });
+}
