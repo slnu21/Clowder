@@ -42,7 +42,8 @@
   --w-right: calc(272px * var(--ui-scale));
   --w-rail-mini: calc(40px * var(--ui-scale));
 
-  --bg-inset: #0f0f0e;   /* terminal — deepest, recedes */
+  --bg-inset: #0f0f0e;   /* terminal background — its own axis (data-term-theme), not data-theme */
+  --term-fg: #e8e6e1;    /* terminal foreground — decoupled from --text-1 so a dark terminal reads under a light app */
   --bg-base: #171614;    /* app canvas */
   --bg-raised: #1f1e1b;  /* side/rail/tabstrip panels */
   --bg-overlay: #282722; /* popovers, menus, cards */
@@ -94,6 +95,11 @@
    * bright yellow is near-white. These sixteen ride the same warm-neutral ramp as the rest of the app
    * and reuse the semantic hues (`--danger`/`--ok`/`--warn`/`--info`) so a red in the terminal is the
    * same red as a red in the rail. Read by `xtermTheme()` and re-applied live by `retheme()`.
+   *
+   * The terminal palette is its **own axis** — `data-term-theme` (dark here at `:root`, light in the
+   * `[data-term-theme="light"]` block below), independent of the UI's `data-theme`. That's what lets a
+   * light app keep a dark, readable terminal (the default): most CLI/TUI colour schemes, including the
+   * truecolor ones the app can't re-map, assume a dark background.
    */
   --ansi-black: #3a3733; /* not #000 — a true black is invisible against --bg-inset */
   --ansi-red: #cf6b6b;
@@ -121,9 +127,9 @@
 :root[data-accent="clay"] { --accent: #c78a6a; --on-accent: #1c1310; }
 :root[data-accent="neutral"] { --accent: #b8b1a4; --on-accent: #1a1815; }
 
-/* Light — its own warm-neutral ramp, darker accent for contrast. */
+/* Light — its own warm-neutral ramp, darker accent for contrast. (The terminal palette is a separate
+   axis — see the `[data-term-theme="light"]` block below — so it is not defined here.) */
 :root[data-theme="light"] {
-  --bg-inset: #f3f1ec;
   --bg-base: #e9e7e1;
   --bg-raised: #f4f2ed;
   --bg-overlay: #ffffff;
@@ -163,13 +169,20 @@
 
   --pop-shadow: 0 16px 40px rgba(60, 55, 45, 0.20);
 
-  /*
-   * Light ANSI. The one rule that matters: **`bright-*` must never be lighter than its base.** On a
-   * dark background "bright" means closer to white; on `--bg-inset: #f3f1ec` that is the same as
-   * invisible. Here bright means *more saturated and a shade darker* — it still reads as emphasis, but
-   * on paper instead of on glass. `bright-yellow` is the one this whole exercise is about: it carries
-   * the PowerShell command line.
-   */
+  color-scheme: light;
+}
+
+/*
+ * Terminal palette (light) — its own axis, `data-term-theme`, independent of the UI's `data-theme`, so a
+ * light app keeps a dark terminal by default (dark lives at `:root`). Only the terminal reads these, via
+ * `xtermTheme()`. The one rule that matters here: **`bright-*` must never be lighter than its base.** On a
+ * dark background "bright" means closer to white; on `#f3f1ec` that is the same as invisible. Here bright
+ * means *more saturated and a shade darker* — it still reads as emphasis, but on paper instead of on
+ * glass. `bright-yellow` carries the PowerShell command line.
+ */
+:root[data-term-theme="light"] {
+  --bg-inset: #f3f1ec;
+  --term-fg: #262420;
   --ansi-black: #2b2925;
   --ansi-red: #a33a3a;
   --ansi-green: #4f6b34;
@@ -186,8 +199,6 @@
   --ansi-bright-magenta: #713a6e;
   --ansi-bright-cyan: #24564f;
   --ansi-bright-white: #3a3833;
-
-  color-scheme: light;
 }
 :root[data-theme="light"][data-accent="amber"] { --accent: #9c6f2e; --on-accent: #fff; }
 :root[data-theme="light"][data-accent="sage"] { --accent: #5f7d3f; --on-accent: #fff; }
