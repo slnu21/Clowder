@@ -349,8 +349,9 @@ export function focusPane(leafId: string): void {
 
 /**
  * Right-click in a terminal: copy if something is selected, otherwise paste — the Windows Terminal
- * behaviour, and the reason a terminal doesn't need a context menu at all. Lives here rather than in
- * `TileTree` so every piece of xterm knowledge stays in one file.
+ * behaviour. Kept for the fast path (a right-click straight after a Shift+drag selection copies without
+ * a menu). When there is no selection, `TileTree` opens a context menu instead — see the note there.
+ * Lives here rather than in `TileTree` so every piece of xterm knowledge stays in one file.
  */
 export async function copyOrPaste(leafId: string): Promise<void> {
   const term = pool.get(leafId)?.term;
@@ -360,6 +361,40 @@ export async function copyOrPaste(leafId: string): Promise<void> {
     term.clearSelection(); // feedback: the highlight going away is what says "copied"
     return;
   }
+  const text = await pasteText();
+  if (text) term.paste(text);
+}
+
+/** Is there a highlighted selection in this pane's terminal right now? */
+export function paneHasSelection(leafId: string): boolean {
+  return pool.get(leafId)?.term.hasSelection() ?? false;
+}
+
+/**
+ * Copy the current selection, or — when there is none — the whole buffer. This is the escape hatch for a
+ * **fullscreen TUI**: an app that turns on mouse tracking (Claude Code does) makes xterm forward drags to
+ * the app instead of selecting, so `hasSelection()` stays false and the ordinary copy paths have nothing
+ * to copy. In the alternate screen there is no scrollback, so "the whole buffer" is exactly the visible
+ * screen — which is what someone wants to lift out of a TUI. Shift+drag still makes a partial selection.
+ */
+export async function copyView(leafId: string): Promise<void> {
+  const term = pool.get(leafId)?.term;
+  if (!term) return;
+  if (!term.hasSelection()) term.selectAll();
+  const text = term.getSelection();
+  if (text) await copyText(text);
+  term.clearSelection();
+}
+
+/** Select everything in the pane's buffer (leaves it highlighted so the user can copy or narrow it). */
+export function selectAllPane(leafId: string): void {
+  pool.get(leafId)?.term.selectAll();
+}
+
+/** Paste the clipboard into the pane (bracketed-paste aware — see `clipboardKeys`). */
+export async function pasteInto(leafId: string): Promise<void> {
+  const term = pool.get(leafId)?.term;
+  if (!term) return;
   const text = await pasteText();
   if (text) term.paste(text);
 }

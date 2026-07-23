@@ -1,8 +1,17 @@
 import { Allotment } from "allotment";
 import "allotment/dist/style.css";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Icon from "../../components/Icon";
 import TerminalView from "../terminal/TerminalView";
-import { copyOrPaste, writeToPane } from "../terminal/terminalPool";
+import {
+  copyOrPaste,
+  copyView,
+  paneHasSelection,
+  pasteInto,
+  selectAllPane,
+  writeToPane,
+} from "../terminal/terminalPool";
 import HtmlViewer from "../viewer/HtmlViewer";
 import MdViewer from "../viewer/MdViewer";
 import { PANE_MIME, useDrag } from "./dragStore";
@@ -89,6 +98,8 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
   // Scalar selectors: this component must not re-render because some *other* pane is hovered.
   const dragging = useDrag((d) => d.payload !== null);
   const zone = useDrag((d) => (d.overPaneId === leaf.id ? d.zone : null));
+  // Right-click menu position (terminal panes only). Null = closed.
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   const onDragOver = (e: React.DragEvent) => {
     // Without preventDefault there is no `drop` event at all — the single most common HTML5 DnD bug.
@@ -180,7 +191,11 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
           leaf.content === "terminal"
             ? (e) => {
                 e.preventDefault();
-                void copyOrPaste(leaf.id);
+                // A selection right after a Shift+drag copies straight away (the Windows Terminal
+                // reflex); with nothing selected, open the menu — the only way to lift text out of a
+                // mouse-mode fullscreen TUI, where a drag is sent to the app instead of selecting.
+                if (paneHasSelection(leaf.id)) void copyOrPaste(leaf.id);
+                else setMenu({ x: e.clientX, y: e.clientY });
               }
             : undefined
         }
@@ -195,7 +210,67 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
           <div className="placeholder">?</div>
         )}
       </div>
+      {menu && (
+        <TerminalMenu
+          leafId={leaf.id}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * The terminal right-click menu — shown only when there is no selection to copy. Its reason to exist is
+ * the fullscreen TUI: with mouse tracking on, a drag never becomes a selection, so "복사" here selects the
+ * buffer first (the visible screen, since the alternate screen has no scrollback). Portalled to `<body>`
+ * so a small or nested pane can't clip it; closes on an outside click or Esc.
+ */
+function TerminalMenu({
+  leafId,
+  x,
+  y,
+  onClose,
+}: {
+  leafId: string;
+  x: number;
+  y: number;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Capture phase, both listeners: xterm handles key/mouse events on its own element and stops their
+    // propagation, so a bubble-phase document listener never sees an Escape or a click landing on the
+    // terminal — and the menu would be stuck open. Capturing at the document beats xterm to the event.
+    // (`Node` is shadowed by the model's pane-tree `Node` here, so reach for the DOM element type.)
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as HTMLElement)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation(); // don't also send ESC to the shell
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="ctx term-ctx" style={{ left: x, top: y }} ref={ref}>
+      <button onClick={() => { void copyView(leafId); onClose(); }}>복사</button>
+      <button onClick={() => { void pasteInto(leafId); onClose(); }}>붙여넣기</button>
+      <button onClick={() => { selectAllPane(leafId); onClose(); }}>모두 선택</button>
+      <div className="ctx-hint">Shift+드래그로 부분 선택</div>
+    </div>,
+    document.body,
   );
 }
 
