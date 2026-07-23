@@ -13,8 +13,11 @@ import { invoke } from "@tauri-apps/api/core";
  */
 export type BeaconStatus = {
   hooks: boolean;
-  statusline: boolean;
+  /** The beacon exe exists at the path the hooks reference (`%USERPROFILE%\.clowder\bin`). */
   binary: boolean;
+  statusline: boolean;
+  /** Where the beacon binary lives, forward-slashed — shown so the user can find it. */
+  binDir: string | null;
   /** The user already has a statusline of their own — install wraps it instead of asking. */
   userStatusline: boolean;
   lastHookAt: string | null;

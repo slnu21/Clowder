@@ -9,10 +9,17 @@
 //! - **Surgical removal**: only entries whose command is a Clowder beacon are removed, so anything added
 //!   later (by the user or another tool) survives an uninstall.
 //!
-//! Path robustness: install stages this exe to a **stable per-user path** (`%LOCALAPPDATA%\Clowder\bin\
+//! Path robustness: install stages this exe to a **stable per-user path** (`%USERPROFILE%\.clowder\bin\
 //! clowder.exe`) and points the hooks + wrapper there, so tracking keeps working if the app itself is
-//! moved or reinstalled elsewhere. Startup refreshes that copy (when the running exe is newer) so an app
-//! update propagates its beacon logic without a reinstall.
+//! moved or reinstalled elsewhere. Startup refreshes that copy (when the running exe is newer) and
+//! repoints stale hooks, so an app update propagates its beacon logic — and the one-time move off the old
+//! `%LOCALAPPDATA%\Clowder\bin` home — without a reinstall.
+//!
+//! **Not under `%LOCALAPPDATA%`, deliberately:** an MSIX (Store) build has its AppData writes virtualized
+//! into a per-package store that the **non-packaged** Claude Code CLI can't see, so a beacon staged there
+//! is missing at the very path the hooks reference — install "succeeds" and tracking silently never runs.
+//! `%USERPROFILE%` is not virtualized (it holds `.claude\settings.json`, which we already write and the
+//! CLI already reads), so a copy there is real for both the packaged app and the CLI.
 //!
 //! Usage self-production: install also wraps the user's statusline (`~/.claude/clowder-statusline-wrap.sh`)
 //! so Claude Code's statusline payload (context %/5h/7d budget) is teed to Clowder's usage spool before
@@ -365,9 +372,17 @@ fn backup(path: &Path) {
 
 // ---- beacon binary staging (path robustness) ----
 
-/// `%LOCALAPPDATA%\Clowder\bin` — a stable per-user home for the beacon binary, referenced by the hooks
+/// `%USERPROFILE%\.clowder\bin` — a stable per-user home for the beacon binary, referenced by the hooks
 /// and the statusline wrapper so session tracking survives the app being moved or reinstalled elsewhere.
+/// Outside `%LOCALAPPDATA%` on purpose so an MSIX build's AppData virtualization can't hide the copy from
+/// the non-packaged Claude Code CLI (see the module doc).
 fn beacon_bin_dir() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE").map(|p| PathBuf::from(p).join(".clowder").join("bin"))
+}
+
+/// The pre-0.1.3 beacon home, `%LOCALAPPDATA%\Clowder\bin`. Kept only to migrate an install that still
+/// points there and to clean up the stale copy (which, under MSIX, was the invisible virtualized ghost).
+fn legacy_beacon_bin_dir() -> Option<PathBuf> {
     crate::spool::clowder_dir().map(|d| d.join("bin"))
 }
 
@@ -407,9 +422,10 @@ fn ensure_beacon_binary() -> Option<String> {
     stage_binary(&src, &beacon_bin_dir()?)
 }
 
-/// Delete the staged beacon binary on uninstall — nothing references it once the hooks are gone. Fail-soft.
+/// Delete the staged beacon binary on uninstall — nothing references it once the hooks are gone. Removes
+/// both the current home and the legacy `%LOCALAPPDATA%\Clowder\bin` one. Fail-soft.
 fn remove_beacon_binary() {
-    if let Some(dir) = beacon_bin_dir() {
+    for dir in [beacon_bin_dir(), legacy_beacon_bin_dir()].into_iter().flatten() {
         let _ = std::fs::remove_file(dir.join("clowder.exe"));
     }
 }
@@ -418,9 +434,78 @@ fn remove_beacon_binary() {
 /// propagates its new beacon logic without a reinstall. Cheap (just a stat) on a normal launch.
 pub fn refresh_beacon_binary_on_startup() {
     let Some(path) = settings_path() else { return };
-    if is_installed(&load(&path)) {
-        if let Some(beacon) = ensure_beacon_binary().or_else(exe_path) {
-            migrate_statusline_wrapper(&beacon);
+    if !is_installed(&load(&path)) {
+        return;
+    }
+    let Some(beacon) = ensure_beacon_binary().or_else(exe_path) else { return };
+    migrate_statusline_wrapper(&beacon);
+    // An app update that relocated the beacon home (→ %USERPROFILE%\.clowder\bin, off virtualized AppData)
+    // leaves the existing hooks/statusline pointing at the old path. Repoint them once, then drop the stale
+    // copy. A normal launch (paths already current) is a no-op read.
+    repoint_beacon(&path, &beacon);
+}
+
+/// Every Clowder beacon hook command currently in settings, across all events.
+fn clowder_commands(root: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(hooks) = root.get("hooks").and_then(|h| h.as_object()) {
+        for arr in hooks.values().filter_map(|a| a.as_array()) {
+            for group in arr {
+                if let Some(list) = group.get("hooks").and_then(|h| h.as_array()) {
+                    for h in list {
+                        if let Some(c) = h.get("command").and_then(|c| c.as_str()) {
+                            if is_clowder_command(Some(c)) {
+                                out.push(c.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Pure DOM step of the repoint: rewrite Clowder's hooks (and its statusLine, if that's ours) to reference
+/// `beacon` when they don't already. Returns `true` when something changed (→ caller writes). Leaves a
+/// statusLine the user replaced with their own alone.
+fn repoint_beacon_dom(root: &mut Value, beacon: &str) -> bool {
+    let needle = beacon.replace('\\', "/").to_lowercase();
+    let refs = |cmd: &str| cmd.replace('\\', "/").to_lowercase().contains(&needle);
+
+    let hooks_current = clowder_commands(root).iter().all(|c| refs(c));
+    let (sl_ours, sl_current) = {
+        let sl_cmd = root.get("statusLine").and_then(|v| v.get("command")).and_then(|c| c.as_str());
+        let ours = is_clowder_statusline(sl_cmd);
+        (ours, !ours || sl_cmd.is_some_and(refs))
+    };
+    if hooks_current && sl_current {
+        return false;
+    }
+    apply_install(root, &format!("\"{beacon}\""));
+    if sl_ours {
+        if let Some(obj) = root.as_object_mut() {
+            obj.insert(
+                "statusLine".into(),
+                json!({ "type": "command", "command": statusline_command(beacon) }),
+            );
+        }
+    }
+    true
+}
+
+/// Repoint an existing install at the freshly staged `beacon`, backing settings up first, then remove the
+/// legacy `%LOCALAPPDATA%\Clowder\bin` copy (or, under MSIX, its virtualized ghost). One write, and only
+/// when something is stale.
+fn repoint_beacon(path: &Path, beacon: &str) {
+    let mut root = load(path);
+    if !repoint_beacon_dom(&mut root, beacon) {
+        return;
+    }
+    backup(path);
+    if save(path, &root).is_ok() {
+        if let Some(dir) = legacy_beacon_bin_dir() {
+            let _ = std::fs::remove_file(dir.join("clowder.exe"));
         }
     }
 }
@@ -437,8 +522,11 @@ pub struct BeaconStatus {
     pub hooks: bool,
     /// statusLine points at our beacon (the only source of usage).
     pub statusline: bool,
-    /// The staged `%LOCALAPPDATA%\Clowder\bin\clowder.exe` exists — hooks reference it by that path.
+    /// The staged `%USERPROFILE%\.clowder\bin\clowder.exe` exists at the path the hooks reference. Honest
+    /// now that the home is off virtualized AppData: the app's `exists()` and the CLI's resolution agree.
     pub binary: bool,
+    /// Where the beacon binary lives, forward-slashed — shown in the rail so the user can find it.
+    pub bin_dir: Option<String>,
     /// The user has a statusLine of their own that we would be wrapping. Drives whether install asks.
     pub user_statusline: bool,
     /// Newest spool write, ISO-8601 — "installed but nothing has arrived" is a distinct state.
@@ -462,10 +550,12 @@ pub fn beacon_status() -> BeaconStatus {
     let root = settings_path().map(|p| load(&p)).unwrap_or_else(|| json!({}));
     let cmd = root.get("statusLine").and_then(|v| v.get("command")).and_then(|c| c.as_str());
     let ours = is_clowder_statusline(cmd);
+    let bin = beacon_bin_dir();
     BeaconStatus {
         hooks: is_installed(&root),
         statusline: ours,
-        binary: beacon_bin_dir().is_some_and(|d| d.join("clowder.exe").exists()),
+        binary: bin.as_ref().is_some_and(|d| d.join("clowder.exe").exists()),
+        bin_dir: bin.map(|d| d.to_string_lossy().replace('\\', "/")),
         // Ours doesn't count as theirs, and the sidecar remembers what we displaced.
         user_statusline: if ours {
             statusline_state().and_then(|(o, _)| o).is_some()
@@ -758,5 +848,40 @@ mod tests {
         );
         apply_statusline_uninstall(&mut root, &state, &wrap);
         assert_eq!(root["statusLine"]["command"], "bash ~/.claude/vigil-statusline-wrap.sh"); // Vigil back
+    }
+
+    // ---- beacon path migration (bin home moved off virtualized AppData) ----
+
+    #[test]
+    fn repoint_rewrites_stale_beacon_path_in_hooks_and_statusline() {
+        let old = "C:/Users/me/AppData/Local/Clowder/bin/clowder.exe";
+        let new = "C:/Users/me/.clowder/bin/clowder.exe";
+        let mut root = json!({});
+        apply_install(&mut root, &format!("\"{old}\""));
+        root.as_object_mut().unwrap().insert(
+            "statusLine".into(),
+            json!({ "type": "command", "command": statusline_command(old) }),
+        );
+
+        assert!(repoint_beacon_dom(&mut root, new), "a stale path must report a change");
+        for c in clowder_commands(&root) {
+            assert!(c.contains(new), "hook still on old path: {c}");
+            assert!(!c.contains("AppData/Local/Clowder/bin"), "old path left behind: {c}");
+        }
+        assert_eq!(root["statusLine"]["command"].as_str().unwrap(), statusline_command(new));
+        // Idempotent: everything already points at the new path.
+        assert!(!repoint_beacon_dom(&mut root, new), "already current → no change");
+    }
+
+    #[test]
+    fn repoint_leaves_a_user_replaced_statusline_alone() {
+        let new = "C:/Users/me/.clowder/bin/clowder.exe";
+        let mut root = json!({});
+        apply_install(&mut root, &format!("\"{new}\"")); // hooks already on the new path
+        root.as_object_mut()
+            .unwrap()
+            .insert("statusLine".into(), json!({ "type": "command", "command": "my-own-line" }));
+        assert!(!repoint_beacon_dom(&mut root, new), "nothing stale → no change");
+        assert_eq!(root["statusLine"]["command"], "my-own-line");
     }
 }

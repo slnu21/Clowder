@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import Icon from "../../components/Icon";
 import { beaconInstall, beaconStatus, beaconUninstall } from "../../lib/beacon";
 import type { BeaconStatus, StatuslineMode } from "../../lib/beacon";
@@ -166,6 +167,22 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
       </div>
 
       {snap && <UsageFooter usage={snap.usage} />}
+
+      {/* Where the beacon lives — the thing that was invisible before. `binary` is honest now that the
+          home is off virtualized AppData, so a false one is a real "the CLI can't find it" state. */}
+      {status?.hooks && status.binDir && (
+        <div className={"track-loc" + (status.binary ? "" : " track-loc-warn")}>
+          <span className="track-loc-label">{status.binary ? "추적 위치" : "추적 파일 없음"}</span>
+          <span className="track-loc-path" title={status.binDir}>{status.binDir}</span>
+          <button
+            className="track-loc-open"
+            onClick={() => void revealItemInDir(status.binDir!)}
+            title="폴더 열기"
+          >
+            열기
+          </button>
+        </div>
+      )}
 
       {status?.hooks && (
         <button
