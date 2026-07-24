@@ -854,6 +854,66 @@ button {
   font-size: var(--fs-2xs);
 }
 
+/* ── git panel ────────────────────────────────────────── */
+.git-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+.git-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--h-bar);
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.git-branch { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.git-branch-icon { flex: none; color: var(--accent); }
+.git-branch-name {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-ab { display: flex; gap: 6px; flex: none; font-family: var(--mono); font-size: var(--fs-2xs); color: var(--text-3); }
+
+.git-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.git-refresh:hover { color: var(--text-1); background: var(--bg-base); }
+
+.git-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
+.git-clean { color: var(--text-3); font-size: var(--fs-sm); }
+.git-counts { display: flex; flex-direction: column; gap: 6px; }
+.git-count { display: flex; align-items: baseline; gap: 8px; font-size: var(--fs-sm); }
+.git-count-n { min-width: 20px; font-family: var(--mono); font-weight: 700; text-align: right; color: var(--text-1); }
+.git-count-label { color: var(--text-2); }
+.git-count.conflict .git-count-n { color: var(--st-permission); }
+
+.git-open {
+  margin: 0 12px 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.git-open:hover { color: var(--text-1); background: var(--bg-base); }
+
 /* ── session board (right rail) ───────────────────────── */
 .waiting-badge {
   margin-left: 6px;
