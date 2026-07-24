@@ -1,8 +1,10 @@
 import type { ComponentType } from "react";
 import type { IconName } from "../../components/Icon";
 import type { RightPanelId } from "../../lib/settings";
+import { sshHosts } from "../../lib/ssh";
 import PortsPanel from "./panels/PortsPanel";
 import { SessionsBadge, SessionsBody } from "./panels/SessionsPanel";
+import SshPanel from "./panels/SshPanel";
 
 export type { RightPanelId };
 
@@ -48,5 +50,15 @@ export const PORTS: RightPanelDef = {
   available: () => true,
 };
 
-/** The registry, in switcher order. New panels append here (ssh, git, …). */
-export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS];
+/** SSH hosts from `~/.ssh/config`. Available only when the config has at least one concrete host, so a
+ *  machine that doesn't use ssh never sees the panel. Its verb is "connect" — spawn `ssh <host>`. */
+export const SSH: RightPanelDef = {
+  id: "ssh",
+  label: "SSH",
+  icon: "ssh",
+  Body: SshPanel,
+  available: async () => (await sshHosts()).length > 0,
+};
+
+/** The registry, in switcher order. New panels append here (git, …). */
+export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH];

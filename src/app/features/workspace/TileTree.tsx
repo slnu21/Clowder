@@ -201,7 +201,7 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
         }
       >
         {leaf.content === "terminal" ? (
-          <TerminalView leafId={leaf.id} cwd={leaf.cwd} />
+          <TerminalView leafId={leaf.id} cwd={leaf.cwd} runOnStart={leaf.runOnStart} />
         ) : leaf.content === "md" && leaf.path ? (
           <MdViewer path={leaf.path} />
         ) : leaf.content === "html" && leaf.path ? (

@@ -12,6 +12,7 @@ pub mod selftest;
 pub mod sessions;
 pub mod settings;
 pub mod spool;
+pub mod ssh;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -52,6 +53,7 @@ pub fn run() {
             pty::pty_close,
             ports::list_ports,
             ports::kill_process,
+            ssh::ssh_hosts,
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,
