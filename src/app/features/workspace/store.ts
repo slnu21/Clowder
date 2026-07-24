@@ -9,6 +9,7 @@ import {
   findLeaf,
   firstLeafId,
   Leaf,
+  makeCommandLeaf,
   makeTerminalLeaf,
   makeViewerLeaf,
   moveLeaf,
@@ -48,6 +49,9 @@ type State = {
   focusLeaf: (leafId: string) => void;
   /** From the explorer: every "open terminal here" is its own tab. */
   openTerminalTab: (cwd: string) => void;
+  /** Open a terminal tab that runs a command once on spawn (ssh connect, exec, run a task). The verb
+   *  every rail panel shares — the shell survives after the command exits, landing back at a prompt. */
+  openCommandTab: (command: string, title: string, cwd?: string) => void;
   /** Open a document (md/html) as its own viewer tab; re-focus an existing tab for the same path. */
   openViewerTab: (path: string, kind: "md" | "html") => void;
   newTab: () => void;
@@ -95,6 +99,12 @@ export const useWorkspace = create<State>((set, get) => ({
   openTerminalTab: (cwd) => {
     const tab = newTerminalTab(cwd);
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id, activePaneId: firstLeafId(tab.root) }));
+  },
+
+  openCommandTab: (command, title, cwd) => {
+    const leaf = makeCommandLeaf(command, title, cwd);
+    const tab: Tab = { id: nextId("tab"), title, root: leaf };
+    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id, activePaneId: leaf.id }));
   },
 
   openViewerTab: (path, kind) => {

@@ -11,7 +11,15 @@ import { attach, detach } from "./terminalPool";
  * Everything that has to survive a move (refit, scrollback, focus) lives in the pool, not here — this
  * component only says when the host appears and disappears.
  */
-export default function TerminalView({ leafId, cwd }: { leafId: string; cwd?: string }) {
+export default function TerminalView({
+  leafId,
+  cwd,
+  runOnStart,
+}: {
+  leafId: string;
+  cwd?: string;
+  runOnStart?: string;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,7 +28,9 @@ export default function TerminalView({ leafId, cwd }: { leafId: string; cwd?: st
     // Read once, imperatively: subscribing would re-run this effect on every focus change and thrash
     // the very attachment we're protecting.
     const focus = useWorkspace.getState().activePaneId === leafId;
-    const entry = attach(leafId, host, { cwd, focus });
+    // `runOnStart` is only consumed on the pane's first spawn (acquire is idempotent), so a re-attach
+    // after a move/tab-switch never re-runs it.
+    const entry = attach(leafId, host, { cwd, focus, runOnStart });
 
     // The observer covers later resizes and tab reveals; the attach-time fit covers the move itself.
     const refit = () => {
@@ -33,7 +43,7 @@ export default function TerminalView({ leafId, cwd }: { leafId: string; cwd?: st
       ro.disconnect();
       detach(leafId, host);
     };
-  }, [leafId, cwd]);
+  }, [leafId, cwd, runOnStart]);
 
   return <div className="terminal-host" ref={hostRef} />;
 }

@@ -19,6 +19,9 @@ export type Leaf = {
   title: string;
   /** Terminal working directory (spawn cwd, never a `cd` injection). */
   cwd?: string;
+  /** A command run once, after the first prompt appears — the shared primitive behind the ssh/exec/
+   *  task panels (ssh connect, `kubectl exec`, run a script). Injected as keystrokes; see the pool. */
+  runOnStart?: string;
   /** md/html file path (M6). */
   path?: string;
   /** Palette index 1..TINT_COUNT. Auto-assigned on split so siblings are told apart at a glance. */
@@ -67,6 +70,14 @@ export function basename(p: string): string {
 
 export function makeTerminalLeaf(cwd?: string, fallbackTitle = "bash"): Leaf {
   return { kind: "leaf", id: nextId("p"), content: "terminal", cwd, title: cwd ? basename(cwd) : fallbackTitle };
+}
+
+/**
+ * A terminal leaf that runs `command` once on spawn — the shared primitive behind the ssh/exec/task
+ * panels. Titled explicitly (the host or task name), not derived from cwd.
+ */
+export function makeCommandLeaf(command: string, title: string, cwd?: string): Leaf {
+  return { kind: "leaf", id: nextId("p"), content: "terminal", cwd, title, runOnStart: command };
 }
 
 /** How many `--tint-N` tokens exist (see App.css). */

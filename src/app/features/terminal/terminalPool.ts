@@ -225,7 +225,7 @@ const URL_RE = /\b(?:https?:\/\/|mailto:)[^\s<>"'`]+/g;
  */
 const PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|\/)?(?:[\w.~%$@+-]+[\\/])+[\w.~%$@+-]+(?::\d+){0,2}/g;
 
-export function acquire(leafId: string, cwd?: string): PoolEntry {
+export function acquire(leafId: string, cwd?: string, runOnStart?: string): PoolEntry {
   const existing = pool.get(leafId);
   if (existing) return existing;
 
@@ -253,10 +253,25 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
   void (async () => {
     const shell = await resolveShell();
     if (entry.released) return;
+    // A one-shot: run the leaf's start command once the shell's first output (its prompt) lands, so the
+    // line editor is ready and the command isn't swallowed. Keystroke injection **deliberately** — it
+    // reuses the whole spawn path and never touches the CJK-sensitive wrapper in `build_command`.
+    let pending = runOnStart;
     // Bytes, not text — xterm.js stitches partial UTF-8 sequences across writes.
     const id = await ptySpawn(
       { shell, cwd, cols: term.cols, rows: term.rows },
-      (bytes) => term.write(bytes),
+      (bytes) => {
+        term.write(bytes);
+        if (pending) {
+          const cmd = pending;
+          pending = undefined;
+          // A short beat after the first chunk: some shells emit the prompt in pieces, and typing
+          // before it settles drops characters. 80ms is invisible and reliable here.
+          setTimeout(() => {
+            if (!entry.released && entry.ptyId != null) void ptyWrite(entry.ptyId, cmd + "\r");
+          }, 80);
+        }
+      },
     );
     if (entry.released) {
       void ptyClose(id);
@@ -292,9 +307,9 @@ export function acquire(leafId: string, cwd?: string): PoolEntry {
 export function attach(
   leafId: string,
   host: HTMLElement,
-  opts: { cwd?: string; focus?: boolean } = {},
+  opts: { cwd?: string; focus?: boolean; runOnStart?: string } = {},
 ): PoolEntry {
-  const entry = acquire(leafId, opts.cwd);
+  const entry = acquire(leafId, opts.cwd, opts.runOnStart);
   host.appendChild(entry.el);
   requestAnimationFrame(() => {
     if (host.clientHeight > 0 && host.clientWidth > 0) entry.fit.fit();
