@@ -694,6 +694,35 @@ button {
   color: var(--text-3);
 }
 
+/* ── right rail: panel switcher (shown only with >1 panel) ── */
+.rail-head {
+  display: flex;
+  align-items: center;
+  height: var(--h-bar);
+  padding: 0 6px;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.rail-switch { display: flex; gap: 2px; }
+
+.rail-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: calc(var(--h-bar) - 8px);
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.rail-tab.on { color: var(--text-1); border-bottom-color: var(--accent); }
+.rail-tab:not(.on):hover { color: var(--text-2); }
+
 /* ── session board (right rail) ───────────────────────── */
 .waiting-badge {
   margin-left: 6px;

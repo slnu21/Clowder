@@ -30,9 +30,17 @@ export type Settings = {
    * never sees a rail they have no use for. Touching the toggle makes it an explicit choice.
    */
   rightRail: RailMode | null;
+  /**
+   * Which panel the right rail shows. Orthogonal to `rightRail` (that's the width axis). Defaults to
+   * `"sessions"`; a value whose panel isn't registered yet falls back to the first available panel.
+   */
+  rightPanel: RightPanelId;
 };
 
 export type RailMode = "full" | "mini" | "hidden";
+/** The registry of right-rail panels. The canonical id list lives here (part of the Settings shape);
+ *  `features/rail/registry.ts` imports it so `lib` stays a leaf. Not every id is implemented yet. */
+export type RightPanelId = "sessions" | "ports" | "ssh" | "git" | "k8s" | "docker" | "task" | "snippets";
 export type TerminalTheme = "follow" | "dark" | "light";
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -49,6 +57,7 @@ export const DEFAULT_SETTINGS: Settings = {
   uiScale: 1,
   leftPanel: true,
   rightRail: null,
+  rightPanel: "sessions",
 };
 
 export const getSettings = () => invoke<Settings>("get_settings");
