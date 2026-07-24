@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { IconName } from "../../components/Icon";
 import type { RightPanelId } from "../../lib/settings";
 import { sshHosts } from "../../lib/ssh";
+import GitPanel from "./panels/GitPanel";
 import PortsPanel from "./panels/PortsPanel";
 import { SessionsBadge, SessionsBody } from "./panels/SessionsPanel";
 import SshPanel from "./panels/SshPanel";
@@ -60,5 +61,14 @@ export const SSH: RightPanelDef = {
   available: async () => (await sshHosts()).length > 0,
 };
 
-/** The registry, in switcher order. New panels append here (git, …). */
-export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH];
+/** Git status of the active terminal pane's folder. Always shown (it degrades to "저장소 아님" when the
+ *  active pane isn't a repo). Bound to `leaf.cwd`; the live-cwd milestone upgrades it to follow `cd`. */
+export const GIT: RightPanelDef = {
+  id: "git",
+  label: "Git",
+  icon: "git-branch",
+  Body: GitPanel,
+};
+
+/** The registry, in switcher order. New panels append here (k8s, docker, task, …). */
+export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT];

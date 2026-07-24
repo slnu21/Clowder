@@ -3,6 +3,7 @@ pub mod beacon_install;
 pub mod conpty_check;
 pub mod correlate;
 pub mod fs_ops;
+pub mod git;
 pub mod link;
 pub mod liveness;
 pub mod ports;
@@ -54,6 +55,7 @@ pub fn run() {
             ports::list_ports,
             ports::kill_process,
             ssh::ssh_hosts,
+            git::git_status,
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,

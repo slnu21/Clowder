@@ -26,7 +26,8 @@ export type IconName =
   | "panel-right"
   | "ports"
   | "refresh"
-  | "ssh";
+  | "ssh"
+  | "git-branch";
 
 const SHAPES: Record<IconName, React.ReactNode> = {
   folder: (
@@ -126,6 +127,14 @@ const SHAPES: Record<IconName, React.ReactNode> = {
       <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
       <path d="M6 6h.01" />
       <path d="M6 18h.01" />
+    </>
+  ),
+  "git-branch": (
+    <>
+      <line x1="6" x2="6" y1="3" y2="15" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
     </>
   ),
 };
