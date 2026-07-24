@@ -1,6 +1,6 @@
 import TitleBar from "./features/chrome/TitleBar";
 import ResizeHandles from "./features/chrome/ResizeHandles";
-import { useRailMode, useTrackingProbe } from "./features/chrome/panels";
+import { useRailMode } from "./features/chrome/panels";
 import Explorer from "./features/explorer/Explorer";
 import RightRail from "./features/rail/RightRail";
 import Workspace from "./features/workspace/Workspace";
@@ -19,7 +19,6 @@ export default function App() {
   const openViewerTab = useWorkspace((s) => s.openViewerTab);
   const leftPanel = useSettings((s) => s.settings.leftPanel);
   const rail = useRailMode();
-  useTrackingProbe();
 
   return (
     <div className="app-root">

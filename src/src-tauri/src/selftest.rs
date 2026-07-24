@@ -205,6 +205,14 @@ pub fn run() -> i32 {
     let (ok, detail) = statusline_round_trip();
     t.check("statusline_writes_usage", ok, detail);
 
+    // --- ports panel (Win32 TCP table) ---
+    // list_ports() is fail-soft (empty on failure), so "it didn't panic" is a weak gate. Assert the
+    // live GetExtendedTcpTable path actually read the machine's listeners: a Windows box always has
+    // some (RPC/SMB), so an empty list — or a zero port — means the FFI returned nothing usable.
+    let ports = crate::ports::list_ports();
+    let sane = !ports.is_empty() && ports.iter().all(|p| p.port != 0);
+    t.check("ports_table_read", sane, format!("{} listening port(s)", ports.len()));
+
     // M5 adds: spool parse/sort/reap, ancestor walk.
 
     let result = if t.failed == 0 { "OK" } else { "FAIL" };

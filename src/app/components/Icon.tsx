@@ -23,7 +23,9 @@ export type IconName =
   | "minimize"
   | "maximize"
   | "panel-left"
-  | "panel-right";
+  | "panel-right"
+  | "ports"
+  | "refresh";
 
 const SHAPES: Record<IconName, React.ReactNode> = {
   folder: (
@@ -100,6 +102,21 @@ const SHAPES: Record<IconName, React.ReactNode> = {
     <>
       <rect width="18" height="18" x="3" y="3" rx="2" />
       <path d="M15 3v18" />
+    </>
+  ),
+  ports: (
+    <>
+      <rect width="6" height="6" x="16" y="16" rx="1" />
+      <rect width="6" height="6" x="2" y="16" rx="1" />
+      <rect width="6" height="6" x="9" y="2" rx="1" />
+      <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" />
+      <path d="M12 12V8" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
     </>
   ),
 };

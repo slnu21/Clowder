@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { IconName } from "../../components/Icon";
 import type { RightPanelId } from "../../lib/settings";
+import PortsPanel from "./panels/PortsPanel";
 import { SessionsBadge, SessionsBody } from "./panels/SessionsPanel";
 
 export type { RightPanelId };
@@ -37,5 +38,15 @@ export const SESSIONS: RightPanelDef = {
   Badge: SessionsBadge,
 };
 
-/** The registry, in switcher order. New panels append here (ports, ssh, git, …). */
-export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS];
+/** Listening ports — always available on Windows (there's always a TCP table to read). Its verb is
+ *  "kill the process on this port", the classic "port 3000 already in use" fix, inline. */
+export const PORTS: RightPanelDef = {
+  id: "ports",
+  label: "포트",
+  icon: "ports",
+  Body: PortsPanel,
+  available: () => true,
+};
+
+/** The registry, in switcher order. New panels append here (ssh, git, …). */
+export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS];
