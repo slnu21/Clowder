@@ -42,6 +42,10 @@ pub struct Settings {
     /// never sees a rail they have no use for. Once they touch the toggle it becomes their choice and
     /// stops tracking the install state.
     pub right_rail: Option<String>,
+    /// Which panel the right rail shows (`"sessions"` | `"ports"` | `"ssh"` | …). Orthogonal to
+    /// `right_rail`, which is the width axis. Stored as a free string; the frontend registry owns the
+    /// canonical set and falls back to the first available panel for an unknown value.
+    pub right_panel: String,
 }
 
 impl Default for Settings {
@@ -60,6 +64,7 @@ impl Default for Settings {
             ui_scale: 1.0,
             left_panel: true,
             right_rail: None,
+            right_panel: "sessions".into(),
         }
     }
 }

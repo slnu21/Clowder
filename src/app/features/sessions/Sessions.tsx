@@ -25,7 +25,7 @@ const STATUS_LABEL: Record<string, string> = {
  * need the user (permission / my-turn) sit on top. Read-only — the state lives in Rust; this renders
  * the pushed snapshot and ticks the elapsed clocks locally.
  */
-export default function Sessions({ variant = "full" }: { variant?: "full" | "mini" }) {
+export default function Sessions({ variant = "full" }: { variant?: "full" | "mini" | "body" }) {
   const [snap, setSnap] = useState<SessionsSnapshot | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -113,13 +113,11 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
     );
   }
 
-  return (
-    <aside className="pane sessions">
-      <div className="pane-title">
-        세션
-        {waiting > 0 && <span className="waiting-badge">{waiting}</span>}
-      </div>
-
+  // The inner content, shared by the self-contained `full` rail and the host-embedded `body`. In
+  // `body` mode RightRail supplies the <aside> shell and the header (with the waiting badge), so the
+  // panel returns only what goes inside.
+  const body = (
+    <>
       <div className="session-list">
         {asking ? (
           <div className="track-prompt">
@@ -194,6 +192,18 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
           세션 추적 끄기
         </button>
       )}
+    </>
+  );
+
+  if (variant === "body") return body;
+
+  return (
+    <aside className="pane sessions">
+      <div className="pane-title">
+        세션
+        {waiting > 0 && <span className="waiting-badge">{waiting}</span>}
+      </div>
+      {body}
     </aside>
   );
 }

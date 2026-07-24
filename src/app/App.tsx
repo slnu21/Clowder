@@ -2,7 +2,7 @@ import TitleBar from "./features/chrome/TitleBar";
 import ResizeHandles from "./features/chrome/ResizeHandles";
 import { useRailMode, useTrackingProbe } from "./features/chrome/panels";
 import Explorer from "./features/explorer/Explorer";
-import Sessions from "./features/sessions/Sessions";
+import RightRail from "./features/rail/RightRail";
 import Workspace from "./features/workspace/Workspace";
 import { useSettings } from "./features/settings/store";
 import { useWorkspace } from "./features/workspace/store";
@@ -10,8 +10,9 @@ import type { RailMode } from "./lib/settings";
 
 /**
  * The window: a custom title bar over the three regions. Left = full filesystem explorer, centre =
- * tabbed/tileable workspace, right = session tree. "Open terminal here" from the explorer opens the
- * folder as its own tab. `ResizeHandles` restores edge resizing under the frameless window.
+ * tabbed/tileable workspace, right = the selectable panel rail (sessions by default). "Open terminal
+ * here" from the explorer opens the folder as its own tab. `ResizeHandles` restores edge resizing
+ * under the frameless window.
  */
 export default function App() {
   const openTerminalTab = useWorkspace((s) => s.openTerminalTab);
@@ -32,7 +33,7 @@ export default function App() {
 
         <Workspace />
 
-        <Sessions variant={rail === "mini" ? "mini" : "full"} />
+        <RightRail />
       </div>
 
       <ResizeHandles />
