@@ -31,5 +31,7 @@ windows = { version = "0.61", features = [
     # M5 session correlation: liveness (OpenProcess/GetProcessTimes) + ancestor walk (Toolhelp32).
     "Win32_System_Threading",
     "Win32_System_Diagnostics_ToolHelp",
+    # Ports panel: GetExtendedTcpTable (listening TCP ports + owning pid).
+    "Win32_NetworkManagement_IpHelper",
 ] }
 tauri-plugin-clipboard-manager = "2.3.2"

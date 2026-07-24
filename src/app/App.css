@@ -723,6 +723,73 @@ button {
 .rail-tab.on { color: var(--text-1); border-bottom-color: var(--accent); }
 .rail-tab:not(.on):hover { color: var(--text-2); }
 
+/* ── ports panel ──────────────────────────────────────── */
+.ports-list { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+.ports-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--h-bar);
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--line-1);
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ports-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.ports-refresh:hover { color: var(--text-1); background: var(--bg-base); }
+
+.ports-rows { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 3px; }
+
+.port-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--bg-base);
+  font-size: var(--fs-sm);
+}
+
+.port-num { font-family: var(--mono); font-weight: 700; color: var(--accent); }
+.port-proc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.port-kill {
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  padding: 1px 8px;
+  background: none;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+.port-kill:hover:not(:disabled) { color: #fff; background: var(--st-permission); border-color: var(--st-permission); }
+.port-kill:disabled { opacity: 0.5; cursor: default; }
+.port-row.failed .port-kill { color: var(--st-permission); border-color: var(--st-permission); }
+
 /* ── session board (right rail) ───────────────────────── */
 .waiting-badge {
   margin-left: 6px;

@@ -5,6 +5,7 @@ pub mod correlate;
 pub mod fs_ops;
 pub mod link;
 pub mod liveness;
+pub mod ports;
 pub mod pty;
 pub mod quote;
 pub mod selftest;
@@ -49,6 +50,8 @@ pub fn run() {
             pty::pty_write,
             pty::pty_resize,
             pty::pty_close,
+            ports::list_ports,
+            ports::kill_process,
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,
