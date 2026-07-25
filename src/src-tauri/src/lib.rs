@@ -14,6 +14,7 @@ pub mod quote;
 pub mod selftest;
 pub mod sessions;
 pub mod settings;
+pub mod snippets;
 pub mod spool;
 pub mod ssh;
 pub mod tasks;
@@ -67,6 +68,8 @@ pub fn run() {
             docker::docker_start,
             docker::docker_stop,
             tasks::list_tasks,
+            snippets::get_snippets,
+            snippets::set_snippets,
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,
