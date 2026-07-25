@@ -1,8 +1,10 @@
 import type { ComponentType } from "react";
 import type { IconName } from "../../components/Icon";
 import type { RightPanelId } from "../../lib/settings";
+import { dockerOk } from "../../lib/docker";
 import { kubectlContexts } from "../../lib/k8s";
 import { sshHosts } from "../../lib/ssh";
+import DockerPanel from "./panels/DockerPanel";
 import GitPanel from "./panels/GitPanel";
 import KubernetesPanel from "./panels/KubernetesPanel";
 import PortsPanel from "./panels/PortsPanel";
@@ -82,5 +84,15 @@ export const K8S: RightPanelDef = {
   available: async () => (await kubectlContexts()).contexts.length > 0,
 };
 
-/** The registry, in switcher order. New panels append here (docker, task, …). */
-export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT, K8S];
+/** Docker containers: start/stop, exec-shell, logs. Available only when docker is usable (installed +
+ *  daemon up), so a machine without docker never sees it. */
+export const DOCKER: RightPanelDef = {
+  id: "docker",
+  label: "Docker",
+  icon: "docker",
+  Body: DockerPanel,
+  available: () => dockerOk(),
+};
+
+/** The registry, in switcher order. New panels append here (task, snippets, …). */
+export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT, K8S, DOCKER];
