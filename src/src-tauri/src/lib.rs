@@ -2,6 +2,7 @@ pub mod beacon;
 pub mod beacon_install;
 pub mod conpty_check;
 pub mod correlate;
+pub mod docker;
 pub mod fs_ops;
 pub mod git;
 pub mod k8s;
@@ -60,6 +61,10 @@ pub fn run() {
             k8s::kubectl_contexts,
             k8s::kubectl_use_context,
             k8s::kubectl_pods,
+            docker::docker_ok,
+            docker::docker_containers,
+            docker::docker_start,
+            docker::docker_stop,
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,
