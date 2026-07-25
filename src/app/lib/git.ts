@@ -11,6 +11,7 @@ export type GitStatus = {
   unstaged: number;
   untracked: number;
   conflicts: number;
+  gitMissing: boolean;
 };
 
 /** Git status of `cwd`. Fail-soft in Rust — `isRepo: false` when it isn't a repo or git is absent. */

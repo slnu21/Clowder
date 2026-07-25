@@ -20,38 +20,54 @@ pub struct GitStatus {
     pub unstaged: u32,
     pub untracked: u32,
     pub conflicts: u32,
+    /// `git` itself isn't installed / on PATH — distinct from `is_repo: false` (a real folder that
+    /// just isn't a repo). Lets the panel say "git 미설치" instead of "저장소 아님".
+    pub git_missing: bool,
 }
 
 /// Git status of `cwd`. `is_repo: false` when `cwd` isn't a work tree (or git is absent). Fail-soft.
 #[tauri::command]
 pub fn git_status(cwd: String) -> GitStatus {
-    let root = match run_git(&cwd, &["rev-parse", "--show-toplevel"]) {
-        Some(out) if !out.trim().is_empty() => out.trim().to_string(),
-        _ => return GitStatus::default(), // not a repo, or git not found
+    let root = match try_git(&cwd, &["rev-parse", "--show-toplevel"]) {
+        GitRun::NotFound => return GitStatus { git_missing: true, ..Default::default() },
+        GitRun::Failed => return GitStatus::default(), // git ran, but this isn't a work tree
+        GitRun::Ok(out) if out.trim().is_empty() => return GitStatus::default(),
+        GitRun::Ok(out) => out.trim().to_string(),
     };
-    let porcelain = run_git(&cwd, &["status", "--porcelain=v2", "--branch"]).unwrap_or_default();
+    let porcelain = match try_git(&cwd, &["status", "--porcelain=v2", "--branch"]) {
+        GitRun::Ok(o) => o,
+        _ => String::new(),
+    };
     let mut st = parse_porcelain(&porcelain);
     st.is_repo = true;
     st.root = Some(root);
     st
 }
 
-/// Run `git -C <cwd> <args>` and return stdout, or `None` on spawn failure / non-zero exit.
-fn run_git(cwd: &str, args: &[&str]) -> Option<String> {
+/// Outcome of a `git` invocation: the exe wasn't found, it ran but failed (e.g. not a repo), or it
+/// succeeded with stdout. Distinguishing the first two is what lets the panel say "git 미설치".
+enum GitRun {
+    NotFound,
+    Failed,
+    Ok(String),
+}
+
+/// Run `git -C <cwd> <args>`. `NotFound` when git can't even be spawned (not installed / not on PATH).
+fn try_git(cwd: &str, args: &[&str]) -> GitRun {
     use std::os::windows::process::CommandExt as _;
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(cwd)
         .args(args)
         .creation_flags(0x0800_0000) // CREATE_NO_WINDOW — no console flash (2026-07-21-05)
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
+        .output();
+    match out {
+        Err(_) => GitRun::NotFound, // spawn failed → git isn't there
+        // Lossy is fine: we parse the porcelain header/status codes, not paths, and never feed this
+        // back into a PTY (where byte-exactness matters).
+        Ok(o) if o.status.success() => GitRun::Ok(String::from_utf8_lossy(&o.stdout).into_owned()),
+        Ok(_) => GitRun::Failed,
     }
-    // Lossy is fine here: we parse the porcelain header and status codes, not paths, and never feed
-    // this back into a PTY (where byte-exactness matters).
-    Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// Parse `git status --porcelain=v2 --branch`: branch head, ahead/behind, and staged/unstaged/

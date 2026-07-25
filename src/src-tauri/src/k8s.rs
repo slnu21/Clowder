@@ -69,6 +69,39 @@ pub fn parse_pods(text: &str) -> Vec<KubePod> {
         .collect()
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KubeNamespaces {
+    pub namespaces: Vec<String>,
+    pub current: Option<String>,
+}
+
+/// Cluster namespaces + the current context's namespace. Bounded (cluster query) + fail-soft.
+#[tauri::command]
+pub fn kubectl_namespaces() -> KubeNamespaces {
+    let namespaces = run_kubectl(&["get", "namespaces", "-o", "name", "--request-timeout=5s"])
+        .map(|o| parse_ns_names(&o))
+        .unwrap_or_default();
+    let current = run_kubectl(&["config", "view", "--minify", "-o", "jsonpath={..namespace}"])
+        .map(|o| o.trim().to_string())
+        .filter(|s| !s.is_empty());
+    KubeNamespaces { namespaces, current }
+}
+
+/// Set the current context's namespace. Returns kubectl's stderr on failure.
+#[tauri::command]
+pub fn kubectl_use_namespace(name: String) -> Result<(), String> {
+    run_kubectl_checked(&["config", "set-context", "--current", &format!("--namespace={name}")])
+}
+
+/// `kubectl get namespaces -o name` prints `namespace/<n>` per line — strip the prefix.
+pub fn parse_ns_names(text: &str) -> Vec<String> {
+    text.lines()
+        .map(|l| l.trim().trim_start_matches("namespace/").to_string())
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
 fn run_kubectl(args: &[&str]) -> Option<String> {
     use std::os::windows::process::CommandExt as _;
     let out = std::process::Command::new("kubectl")
@@ -116,5 +149,15 @@ mod tests {
     fn empty_and_blank_lines_are_skipped() {
         assert!(parse_pods("").is_empty());
         assert!(parse_pods("\n  \n").is_empty());
+    }
+
+    #[test]
+    fn parses_namespace_names_stripping_prefix() {
+        use super::parse_ns_names;
+        assert_eq!(
+            parse_ns_names("namespace/default\nnamespace/kube-system\n"),
+            vec!["default".to_string(), "kube-system".to_string()]
+        );
+        assert!(parse_ns_names("").is_empty());
     }
 }

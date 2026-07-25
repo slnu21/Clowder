@@ -1002,6 +1002,21 @@ button {
 .k8s-exec:hover { color: var(--text-1); border-color: var(--accent); }
 .k8s-load:disabled { opacity: 0.5; cursor: default; }
 
+.k8s-ns { display: flex; flex-wrap: wrap; gap: 3px; padding: 8px 8px 0; }
+.k8s-nschip {
+  padding: 2px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+.k8s-nschip:hover:not(:disabled) { color: var(--text-1); border-color: var(--accent); }
+.k8s-nschip.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.k8s-nschip:disabled { cursor: default; }
+
 .k8s-pods { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 3px; }
 .k8s-hint { color: var(--text-3); font-size: var(--fs-sm); padding: 4px; }
 .k8s-pod { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; background: var(--bg-base); }
@@ -1106,7 +1121,9 @@ button {
 .snip-run:hover { color: var(--text-1); background: var(--bg-inset); }
 .snip-icon { flex: none; color: var(--text-3); }
 .snip-run:hover .snip-icon { color: var(--accent); }
-.snip-cmd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snip-text { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.snip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snip-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-2xs); }
 .snip-del {
   flex: none;
   display: flex;
@@ -1122,7 +1139,8 @@ button {
 }
 .snip-del:hover { color: #fff; background: var(--st-permission); }
 
-.snip-add { display: flex; gap: 4px; padding: 8px; border-top: 1px solid var(--line-1); }
+.snip-add { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-top: 1px solid var(--line-1); }
+.snip-add-row { display: flex; gap: 4px; }
 .snip-input {
   flex: 1;
   min-width: 0;

@@ -246,9 +246,12 @@ export const useWorkspace = create<State>((set, get) => ({
       if (!tab) return {};
       const leaf = findLeaf(tab.root, paneId);
       if (!leaf || leaf.cwd === cwd) return {}; // unchanged — don't churn the store on every prompt
+      // The pane title follows cwd for a plain terminal; a command pane (ssh/exec, `runOnStart`) keeps
+      // its host/task name.
+      const patch = leaf.runOnStart ? { cwd } : { cwd, title: basename(cwd) };
       return {
         tabs: s.tabs.map((t) =>
-          t.id === tab.id ? { ...t, root: setLeafProps(t.root, paneId, { cwd }) } : t,
+          t.id === tab.id ? { ...t, root: setLeafProps(t.root, paneId, patch) } : t,
         ),
       };
     });

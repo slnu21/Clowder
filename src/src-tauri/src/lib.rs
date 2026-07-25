@@ -63,6 +63,8 @@ pub fn run() {
             k8s::kubectl_contexts,
             k8s::kubectl_use_context,
             k8s::kubectl_pods,
+            k8s::kubectl_namespaces,
+            k8s::kubectl_use_namespace,
             docker::docker_ok,
             docker::docker_containers,
             docker::docker_start,
