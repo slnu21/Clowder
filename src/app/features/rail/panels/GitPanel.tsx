@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import { gitStatus, type GitStatus } from "../../../lib/git";
-import { findLeaf } from "../../workspace/model";
-import { useWorkspace } from "../../workspace/store";
+import { useActiveTerminalCwd, useWorkspace } from "../../workspace/store";
 
 /**
  * Git status of the **active terminal pane's folder**. Today that's the pane's spawn cwd (`leaf.cwd`);
@@ -11,7 +10,7 @@ import { useWorkspace } from "../../workspace/store";
  * folder that isn't a repo (or git absent) → "저장소 아님".
  */
 export default function GitPanel() {
-  const cwd = useWorkspace(activeTerminalCwd);
+  const cwd = useActiveTerminalCwd();
   const openTerminalTab = useWorkspace((s) => s.openTerminalTab);
   const [status, setStatus] = useState<GitStatus | null>(null);
 
@@ -84,12 +83,4 @@ function GitCount({ kind, label, n }: { kind: string; label: string; n: number }
       <span className="git-count-label">{label}</span>
     </div>
   );
-}
-
-/** cwd of the active terminal pane — `undefined` for a viewer, a blank terminal, or no active pane. */
-function activeTerminalCwd(s: ReturnType<typeof useWorkspace.getState>): string | undefined {
-  const tab = s.tabs.find((t) => t.id === s.activeTabId);
-  if (!tab || !s.activePaneId) return undefined;
-  const leaf = findLeaf(tab.root, s.activePaneId);
-  return leaf?.content === "terminal" ? leaf.cwd : undefined;
 }

@@ -277,6 +277,20 @@ export const useWorkspace = create<State>((set, get) => ({
   },
 }));
 
+/**
+ * cwd of the active terminal pane — `undefined` for a viewer, a blank terminal, or no active pane.
+ * The binding for cwd-scoped rail panels (git, tasks). Returns a plain string, so a subscriber only
+ * re-renders when the active pane's cwd actually changes (including on `cd`, via OSC 7 → `setLeafCwd`).
+ */
+export function useActiveTerminalCwd(): string | undefined {
+  return useWorkspace((s) => {
+    const tab = s.tabs.find((t) => t.id === s.activeTabId);
+    if (!tab || !s.activePaneId) return undefined;
+    const leaf = findLeaf(tab.root, s.activePaneId);
+    return leaf?.content === "terminal" ? leaf.cwd : undefined;
+  });
+}
+
 // Dev safety net for item 1 ("closing one split closes another"). A duplicate pane id is the shared root
 // of both failure modes — it makes `removeLeaf` drop a sibling and makes React collapse two
 // `Allotment.Pane`s onto one key. ids are minted to be unique (`model.nextId`) and `removeLeaf` is

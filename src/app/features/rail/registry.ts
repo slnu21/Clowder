@@ -10,6 +10,7 @@ import KubernetesPanel from "./panels/KubernetesPanel";
 import PortsPanel from "./panels/PortsPanel";
 import { SessionsBadge, SessionsBody } from "./panels/SessionsPanel";
 import SshPanel from "./panels/SshPanel";
+import TaskPanel from "./panels/TaskPanel";
 
 export type { RightPanelId };
 
@@ -94,5 +95,14 @@ export const DOCKER: RightPanelDef = {
   available: () => dockerOk(),
 };
 
-/** The registry, in switcher order. New panels append here (task, snippets, …). */
-export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT, K8S, DOCKER];
+/** Runnable tasks (npm/make/just) in the active pane's folder. Always shown — degrades to "작업 없음"
+ *  when the folder has no manifest. Its verb is "run this task in a new pane". */
+export const TASK: RightPanelDef = {
+  id: "task",
+  label: "작업",
+  icon: "play",
+  Body: TaskPanel,
+};
+
+/** The registry, in switcher order. New panels append here (snippets, …). */
+export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT, K8S, DOCKER, TASK];

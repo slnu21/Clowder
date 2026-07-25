@@ -16,6 +16,7 @@ pub mod sessions;
 pub mod settings;
 pub mod spool;
 pub mod ssh;
+pub mod tasks;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -65,6 +66,7 @@ pub fn run() {
             docker::docker_containers,
             docker::docker_start,
             docker::docker_stop,
+            tasks::list_tasks,
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,
