@@ -914,6 +914,84 @@ button {
 }
 .git-open:hover { color: var(--text-1); background: var(--bg-base); }
 
+/* ── kubernetes panel ─────────────────────────────────── */
+.k8s-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+.k8s-head,
+.k8s-pods-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--h-bar);
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--line-1);
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.k8s-pods-head { border-top: 1px solid var(--line-1); }
+
+.k8s-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.k8s-refresh:hover { color: var(--text-1); background: var(--bg-base); }
+
+.k8s-ctxs { max-height: 45%; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 3px; }
+.k8s-ctx {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.k8s-ctx:hover:not(:disabled) { color: var(--text-1); background: var(--bg-inset); }
+.k8s-ctx:disabled { cursor: default; }
+.k8s-ctx.on { color: var(--text-1); }
+.k8s-ctx-dot { flex: none; width: 7px; height: 7px; border-radius: 999px; background: var(--line-2); }
+.k8s-ctx.on .k8s-ctx-dot { background: var(--accent); }
+.k8s-ctx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.k8s-load,
+.k8s-exec {
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  padding: 1px 8px;
+  background: none;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+.k8s-load:hover:not(:disabled),
+.k8s-exec:hover { color: var(--text-1); border-color: var(--accent); }
+.k8s-load:disabled { opacity: 0.5; cursor: default; }
+
+.k8s-pods { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 3px; }
+.k8s-hint { color: var(--text-3); font-size: var(--fs-sm); padding: 4px; }
+.k8s-pod { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; background: var(--bg-base); }
+.k8s-pod-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-family: var(--mono); font-size: var(--fs-2xs); }
+.k8s-pod-status { flex: none; color: var(--text-3); font-size: var(--fs-2xs); }
+
 /* ── session board (right rail) ───────────────────────── */
 .waiting-badge {
   margin-left: 6px;

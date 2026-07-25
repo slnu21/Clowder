@@ -27,7 +27,11 @@ export type IconName =
   | "ports"
   | "refresh"
   | "ssh"
-  | "git-branch";
+  | "git-branch"
+  | "k8s"
+  | "docker"
+  | "play"
+  | "bookmark";
 
 const SHAPES: Record<IconName, React.ReactNode> = {
   folder: (
@@ -137,6 +141,20 @@ const SHAPES: Record<IconName, React.ReactNode> = {
       <path d="M18 9a9 9 0 0 1-9 9" />
     </>
   ),
+  k8s: (
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+  ),
+  docker: (
+    <>
+      <path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z" />
+      <path d="M10 21.9V14L2.1 9.1" />
+      <path d="m10 14 11.9-6.9" />
+      <path d="M14 19.8v-8.1" />
+      <path d="M18 17.5V9.4" />
+    </>
+  ),
+  play: <polygon points="6 3 20 12 6 21 6 3" />,
+  bookmark: <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />,
 };
 
 export default function Icon({
