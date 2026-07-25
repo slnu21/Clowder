@@ -5,6 +5,8 @@
 **여러 Claude Code 세션을 한 화면에서 다루는 터미널 워크스페이스**
 *A terminal workspace for running parallel Claude Code sessions on one screen*
 
+**[Microsoft Store에서 설치 · Install from the Microsoft Store ↗](https://apps.microsoft.com/detail/9N4795KFCRC3)**
+
 Windows · 오프라인 / 로컬 전용 · [MIT](LICENSE)
 
 <img src="assets/screenshot.png" alt="Clowder — 파일 탐색기, 터미널, 실행 중인 Claude Code 세션 레일을 한 창에 / file explorer, terminal, and a live Claude Code session rail in one window" width="900">
@@ -27,7 +29,7 @@ Clowder는 **여러 Claude Code 세션을 병렬로** 돌리며 — 터미널에
 
 ## 시작하기
 
-1. [Releases](https://github.com/slnu21/Clowder/releases)에서 설치 파일을 받는다 — `Clowder_*_x64-setup.exe`(NSIS, 권장) 또는 `Clowder_*_x64_en-US.msi`.
+1. **[Microsoft Store](https://apps.microsoft.com/detail/9N4795KFCRC3)에서 설치**(권장, 자동 업데이트), 또는 [Releases](https://github.com/slnu21/Clowder/releases)에서 `Clowder_*_x64-setup.exe`(NSIS) · `Clowder_*_x64_en-US.msi`를 받는다.
 2. **요구사항**: Windows 10 / 11 (x64), WebView2 런타임(Windows 11 내장).
 3. **오프라인 / 로컬 전용** — 네트워크 전송·원격 서버 없음. 설정은 `%APPDATA%\deck`, 세션 추적 스풀(설치 시)은 `%LOCALAPPDATA%\Clowder`에 로컬 저장. 자세히는 [PRIVACY.md](PRIVACY.md).
 
@@ -74,7 +76,7 @@ Clowder runs **multiple Claude Code sessions in parallel** — do git and builds
 
 ## Getting started
 
-1. Grab an installer from [Releases](https://github.com/slnu21/Clowder/releases) — `Clowder_*_x64-setup.exe` (NSIS, recommended) or `Clowder_*_x64_en-US.msi`.
+1. **Install from the [Microsoft Store](https://apps.microsoft.com/detail/9N4795KFCRC3)** (recommended, auto-updates), or grab an installer from [Releases](https://github.com/slnu21/Clowder/releases): `Clowder_*_x64-setup.exe` (NSIS) or `Clowder_*_x64_en-US.msi`.
 2. **Requirements**: Windows 10 / 11 (x64), WebView2 runtime (built into Windows 11).
 3. **Offline & local-only** — no network transmission, no remote servers. Settings live in `%APPDATA%\deck`; the session-tracking spool (if installed) in `%LOCALAPPDATA%\Clowder`. See [PRIVACY.md](PRIVACY.md).
 
