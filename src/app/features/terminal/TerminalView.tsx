@@ -29,8 +29,15 @@ export default function TerminalView({
     // the very attachment we're protecting.
     const focus = useWorkspace.getState().activePaneId === leafId;
     // `runOnStart` is only consumed on the pane's first spawn (acquire is idempotent), so a re-attach
-    // after a move/tab-switch never re-runs it.
-    const entry = attach(leafId, host, { cwd, focus, runOnStart });
+    // after a move/tab-switch never re-runs it. `onCwd` feeds the terminal's OSC 7 cwd reports back to
+    // the leaf so the git panel and links follow `cd` (getState, not a subscription — same reason focus
+    // is read imperatively above).
+    const entry = attach(leafId, host, {
+      cwd,
+      focus,
+      runOnStart,
+      onCwd: (c) => useWorkspace.getState().setLeafCwd(leafId, c),
+    });
 
     // The observer covers later resizes and tab reveals; the attach-time fit covers the move itself.
     const refit = () => {

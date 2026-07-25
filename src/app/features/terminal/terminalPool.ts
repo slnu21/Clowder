@@ -3,6 +3,7 @@ import { Terminal as Xterm, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { copyText, pasteText } from "../../lib/clipboard";
 import { openTarget } from "../../lib/openTarget";
+import { osc7ToPath } from "../../lib/osc7";
 import { ptyClose, ptyResize, ptySpawn, ptyWrite, resolveLinkTarget } from "../../lib/tauri";
 import { resolveShell } from "../../lib/settings";
 import { useSettings } from "../settings/store";
@@ -225,7 +226,12 @@ const URL_RE = /\b(?:https?:\/\/|mailto:)[^\s<>"'`]+/g;
  */
 const PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|\/)?(?:[\w.~%$@+-]+[\\/])+[\w.~%$@+-]+(?::\d+){0,2}/g;
 
-export function acquire(leafId: string, cwd?: string, runOnStart?: string): PoolEntry {
+export function acquire(
+  leafId: string,
+  cwd?: string,
+  runOnStart?: string,
+  onCwd?: (cwd: string) => void,
+): PoolEntry {
   const existing = pool.get(leafId);
   if (existing) return existing;
 
@@ -242,9 +248,19 @@ export function acquire(leafId: string, cwd?: string, runOnStart?: string): Pool
   const fit = new FitAddon();
   term.loadAddon(fit);
   term.attachCustomKeyEventHandler(clipboardKeys(term));
-  // `cwd` as a thunk, not a value: it is the pane's launch directory today, but once panes can be
-  // moved and re-targeted the resolver should follow whatever the leaf currently says.
-  registerLinks(term, () => cwd);
+  // The pane's cwd, live: it starts at the spawn dir and then tracks the OSC 7 reports the shell emits
+  // before each prompt (see pty::build_command). Links resolve against it, and `onCwd` propagates a
+  // change up to the leaf so the git panel, titles and same-dir splits follow `cd`.
+  let liveCwd = cwd;
+  registerLinks(term, () => liveCwd);
+  term.parser.registerOscHandler(7, (data) => {
+    const next = osc7ToPath(data);
+    if (next && next !== liveCwd) {
+      liveCwd = next;
+      onCwd?.(next);
+    }
+    return true; // consumed — never let a cwd report fall through as visible text
+  });
   term.open(el);
 
   const entry: PoolEntry = { term, fit, el, ptyId: null, released: false };
@@ -307,9 +323,9 @@ export function acquire(leafId: string, cwd?: string, runOnStart?: string): Pool
 export function attach(
   leafId: string,
   host: HTMLElement,
-  opts: { cwd?: string; focus?: boolean; runOnStart?: string } = {},
+  opts: { cwd?: string; focus?: boolean; runOnStart?: string; onCwd?: (cwd: string) => void } = {},
 ): PoolEntry {
-  const entry = acquire(leafId, opts.cwd, opts.runOnStart);
+  const entry = acquire(leafId, opts.cwd, opts.runOnStart, opts.onCwd);
   host.appendChild(entry.el);
   requestAnimationFrame(() => {
     if (host.clientHeight > 0 && host.clientWidth > 0) entry.fit.fit();

@@ -73,7 +73,12 @@ fn build_command(shell: &str, cwd: Option<&str>) -> CommandBuilder {
     let mut cmd = if lower.ends_with("bash.exe") {
         let mut c = CommandBuilder::new(shell);
         c.arg("-c");
-        c.arg(r#"chcp.com 65001 >/dev/null 2>&1; exec "$BASH" --login -i"#);
+        // chcp → UTF-8 console (see above). The exported PROMPT_COMMAND emits OSC 7 (`file://<pwd>`)
+        // before each prompt, so the pane's cwd tracks `cd` (the frontend reads it — see terminalPool's
+        // OSC 7 handler). Git Bash's default rc sets PS1, not PROMPT_COMMAND, so this survives the login
+        // shell. `$PWD` is MSYS (`/c/…`); the frontend normalizes it. `exec` replaces the wrapper so no
+        // extra shell lingers in the process tree.
+        c.arg(r#"chcp.com 65001 >/dev/null 2>&1; export PROMPT_COMMAND='printf "\033]7;file://%s\033\\" "$PWD"'; exec "$BASH" --login -i"#);
         c
     } else if lower.ends_with("powershell.exe") || lower.ends_with("pwsh.exe") {
         // PowerShell inherits the ConPTY console's OEM code page (CP949 here), so a program writing
@@ -83,9 +88,12 @@ fn build_command(shell: &str, cwd: Option<&str>) -> CommandBuilder {
         let mut c = CommandBuilder::new(shell);
         c.arg("-NoExit");
         c.arg("-Command");
+        // UTF-8 console (see above), then wrap `prompt` to emit OSC 7 each prompt so the pane's cwd
+        // tracks `cd`. Profiles load before `-Command`, so capturing `$function:prompt` wraps whatever
+        // the user set (oh-my-posh etc.) instead of clobbering it. ProviderPath is `C:\…`; `-replace`
+        // gives forward slashes and the frontend normalizes.
         c.arg(
-            "$OutputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; \
-             [Console]::InputEncoding=[System.Text.Encoding]::UTF8",
+            r#"$OutputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; [Console]::InputEncoding=[System.Text.Encoding]::UTF8; $__cwPrompt=$function:prompt; function global:prompt { "$([char]27)]7;file:///$((Get-Location).ProviderPath -replace '\\','/')$([char]27)$([char]92)" + (& $__cwPrompt) }"#,
         );
         c
     } else {

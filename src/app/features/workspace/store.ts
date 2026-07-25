@@ -67,6 +67,9 @@ type State = {
   retargetViewer: (paneId: string, path: string, kind: "md" | "html") => void;
   /** Set a pane's colour deliberately; `null` returns it to the automatic (unfilled) state. */
   setPaneTint: (paneId: string, tint: number | null) => void;
+  /** Update a pane's live cwd (from the terminal's OSC 7 report) so the git panel, links and titles
+   *  follow `cd`. No-op when unchanged. */
+  setLeafCwd: (paneId: string, cwd: string) => void;
   closePane: (paneId: string) => void;
   updateSizes: (splitId: string, sizes: number[]) => void;
 };
@@ -235,6 +238,20 @@ export const useWorkspace = create<State>((set, get) => ({
       tintFill: tint != null ? true : undefined,
     });
     set({ tabs: s.tabs.map((t) => (t.id === tab.id ? { ...t, root } : t)) });
+  },
+
+  setLeafCwd: (paneId, cwd) => {
+    set((s) => {
+      const tab = s.tabs.find((t) => collectLeafIds(t.root).includes(paneId));
+      if (!tab) return {};
+      const leaf = findLeaf(tab.root, paneId);
+      if (!leaf || leaf.cwd === cwd) return {}; // unchanged — don't churn the store on every prompt
+      return {
+        tabs: s.tabs.map((t) =>
+          t.id === tab.id ? { ...t, root: setLeafProps(t.root, paneId, { cwd }) } : t,
+        ),
+      };
+    });
   },
 
   closePane: (paneId) => {
