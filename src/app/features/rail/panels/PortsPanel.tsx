@@ -12,6 +12,7 @@ export default function PortsPanel() {
   const [rows, setRows] = useState<PortRow[] | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [failed, setFailed] = useState<number | null>(null);
+  const [showSystem, setShowSystem] = useState(false);
 
   const refresh = useCallback(() => {
     listPorts()
@@ -41,21 +42,34 @@ export default function PortsPanel() {
     }
   };
 
+  const all = rows ?? [];
+  const shown = showSystem ? all : all.filter((r) => !r.system);
+  const sysCount = all.filter((r) => r.system).length;
+
   return (
     <div className="ports-list">
       <div className="ports-head">
         <span>수신 포트</span>
-        <button className="ports-refresh" onClick={refresh} title="새로고침">
-          <Icon name="refresh" size={13} />
-        </button>
+        <div className="ports-head-actions">
+          <button
+            className={"ports-sys" + (showSystem ? " on" : "")}
+            onClick={() => setShowSystem((v) => !v)}
+            title={showSystem ? "시스템 포트 숨기기" : `시스템 포트 표시${sysCount ? ` (${sysCount})` : ""}`}
+          >
+            시스템{!showSystem && sysCount ? ` ${sysCount}` : ""}
+          </button>
+          <button className="ports-refresh" onClick={refresh} title="새로고침">
+            <Icon name="refresh" size={13} />
+          </button>
+        </div>
       </div>
       {rows === null ? (
         <div className="placeholder">읽는 중…</div>
-      ) : rows.length === 0 ? (
-        <div className="placeholder">수신 포트 없음</div>
+      ) : shown.length === 0 ? (
+        <div className="placeholder">{all.length === 0 ? "수신 포트 없음" : "사용자 포트 없음"}</div>
       ) : (
         <div className="ports-rows">
-          {rows.map((r) => (
+          {shown.map((r) => (
             <div
               className={"port-row" + (failed === r.pid ? " failed" : "")}
               key={`${r.addr}:${r.port}:${r.pid}`}
