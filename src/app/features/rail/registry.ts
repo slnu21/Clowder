@@ -1,8 +1,10 @@
 import type { ComponentType } from "react";
 import type { IconName } from "../../components/Icon";
 import type { RightPanelId } from "../../lib/settings";
+import { kubectlContexts } from "../../lib/k8s";
 import { sshHosts } from "../../lib/ssh";
 import GitPanel from "./panels/GitPanel";
+import KubernetesPanel from "./panels/KubernetesPanel";
 import PortsPanel from "./panels/PortsPanel";
 import { SessionsBadge, SessionsBody } from "./panels/SessionsPanel";
 import SshPanel from "./panels/SshPanel";
@@ -70,5 +72,15 @@ export const GIT: RightPanelDef = {
   Body: GitPanel,
 };
 
-/** The registry, in switcher order. New panels append here (k8s, docker, task, …). */
-export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT];
+/** Kubernetes context switch + pod exec. Available only when kubectl has contexts (no kubectl → hidden).
+ *  Verb: switch context, or `kubectl exec` into a pod in its own pane. */
+export const K8S: RightPanelDef = {
+  id: "k8s",
+  label: "K8s",
+  icon: "k8s",
+  Body: KubernetesPanel,
+  available: async () => (await kubectlContexts()).contexts.length > 0,
+};
+
+/** The registry, in switcher order. New panels append here (docker, task, …). */
+export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT, K8S];
