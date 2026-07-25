@@ -9,6 +9,7 @@ import GitPanel from "./panels/GitPanel";
 import KubernetesPanel from "./panels/KubernetesPanel";
 import PortsPanel from "./panels/PortsPanel";
 import { SessionsBadge, SessionsBody } from "./panels/SessionsPanel";
+import SnippetsPanel from "./panels/SnippetsPanel";
 import SshPanel from "./panels/SshPanel";
 import TaskPanel from "./panels/TaskPanel";
 
@@ -104,5 +105,13 @@ export const TASK: RightPanelDef = {
   Body: TaskPanel,
 };
 
-/** The registry, in switcher order. New panels append here (snippets, …). */
-export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT, K8S, DOCKER, TASK];
+/** Saved command snippets, run in the active pane. Always shown (persisted locally, starts empty). */
+export const SNIPPETS: RightPanelDef = {
+  id: "snippets",
+  label: "스니펫",
+  icon: "bookmark",
+  Body: SnippetsPanel,
+};
+
+/** The registry, in switcher order. */
+export const RIGHT_PANELS: RightPanelDef[] = [SESSIONS, PORTS, SSH, GIT, K8S, DOCKER, TASK, SNIPPETS];
