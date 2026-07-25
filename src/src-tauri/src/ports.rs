@@ -29,6 +29,9 @@ pub struct PortRow {
     pub pid: u32,
     pub process: String,
     pub addr: String,
+    /// Owned by a Windows OS/service process (svchost, System, …) — noise for a dev workflow. The
+    /// frontend hides these by default; the row is still returned so a toggle can reveal it.
+    pub system: bool,
 }
 
 /// Listening TCP ports with their owning process, sorted by port. Fail-soft: empty on any failure.
@@ -40,6 +43,7 @@ pub fn list_ports() -> Vec<PortRow> {
         if let Some(n) = names.get(&r.pid) {
             r.process = n.clone();
         }
+        r.system = is_system_process(&r.process, r.pid);
     }
     rows.sort_by(|a, b| a.port.cmp(&b.port).then(a.pid.cmp(&b.pid)));
     rows
@@ -95,6 +99,7 @@ fn collect_listeners() -> Vec<PortRow> {
                 pid: row.dwOwningPid,
                 process: String::new(), // filled from the name map by the caller
                 addr: ipv4_from_ne(row.dwLocalAddr),
+                system: false, // decided by the caller once the name is filled
             })
             .collect()
     }
@@ -146,6 +151,34 @@ pub fn is_listening(state: u32) -> bool {
     state == TCP_LISTEN
 }
 
+/// Is this listener owned by a Windows OS/service process (svchost, System, …)? Those are the ones a
+/// dev doesn't care about — the panel hides them by default. Deliberately a **short allow-list of core
+/// OS processes**, not a heuristic: a user-installed service (sqlservr, postgres, redis) is *not*
+/// system and should stay visible. pid 0/4 are System Idle / System; an empty name is almost always
+/// one of those with a name we couldn't read.
+pub fn is_system_process(name: &str, pid: u32) -> bool {
+    if pid == 0 || pid == 4 {
+        return true;
+    }
+    let n = name.to_ascii_lowercase();
+    if n.is_empty() {
+        return true;
+    }
+    matches!(
+        n.as_str(),
+        "system"
+            | "svchost.exe"
+            | "services.exe"
+            | "lsass.exe"
+            | "wininit.exe"
+            | "winlogon.exe"
+            | "smss.exe"
+            | "csrss.exe"
+            | "spoolsv.exe"
+            | "searchindexer.exe"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ipv4_from_ne, is_listening, port_from_be};
@@ -170,5 +203,21 @@ mod tests {
         assert!(is_listening(2)); // LISTEN
         assert!(!is_listening(1)); // CLOSED
         assert!(!is_listening(5)); // ESTABLISHED
+    }
+
+    #[test]
+    fn system_processes_are_flagged_but_user_servers_are_not() {
+        use super::is_system_process;
+        // core OS processes / System pid — hidden by default
+        assert!(is_system_process("svchost.exe", 1234));
+        assert!(is_system_process("SVCHOST.EXE", 1234)); // case-insensitive
+        assert!(is_system_process("System", 4));
+        assert!(is_system_process("", 4)); // System with an unreadable name
+        assert!(is_system_process("anything", 4)); // pid 4 is System regardless of name
+        // user processes and user-installed services — stay visible
+        assert!(!is_system_process("node.exe", 5000));
+        assert!(!is_system_process("python.exe", 8000));
+        assert!(!is_system_process("sqlservr.exe", 1433));
+        assert!(!is_system_process("postgres.exe", 5432));
     }
 }
