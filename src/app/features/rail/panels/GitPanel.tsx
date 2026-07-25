@@ -31,6 +31,7 @@ export default function GitPanel() {
   }, [refresh]);
 
   if (!cwd) return <div className="placeholder">활성 터미널 없음</div>;
+  if (status?.gitMissing) return <div className="placeholder">git 미설치</div>;
   if (!status || !status.isRepo) return <div className="placeholder">저장소 아님</div>;
 
   const dirty = status.staged + status.unstaged + status.untracked + status.conflicts;

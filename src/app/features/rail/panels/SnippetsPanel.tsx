@@ -12,7 +12,8 @@ import { useWorkspace } from "../../workspace/store";
  */
 export default function SnippetsPanel() {
   const [snips, setSnips] = useState<Snippet[]>([]);
-  const [draft, setDraft] = useState("");
+  const [draftLabel, setDraftLabel] = useState("");
+  const [draftCmd, setDraftCmd] = useState("");
   const openCommandTab = useWorkspace((s) => s.openCommandTab);
 
   useEffect(() => {
@@ -28,10 +29,11 @@ export default function SnippetsPanel() {
 
   const add = (e: FormEvent) => {
     e.preventDefault();
-    const command = draft.trim();
+    const command = draftCmd.trim();
     if (!command) return;
-    persist([...snips, { id: crypto.randomUUID(), command }]);
-    setDraft("");
+    persist([...snips, { id: crypto.randomUUID(), label: draftLabel.trim(), command }]);
+    setDraftLabel("");
+    setDraftCmd("");
   };
 
   const del = (id: string) => persist(snips.filter((s) => s.id !== id));
@@ -55,9 +57,12 @@ export default function SnippetsPanel() {
         ) : (
           snips.map((s) => (
             <div className="snip-row" key={s.id}>
-              <button className="snip-run" onClick={() => run(s.command)} title="활성 페인에서 실행">
+              <button className="snip-run" onClick={() => run(s.command)} title={`실행: ${s.command}`}>
                 <Icon name="play" size={12} className="snip-icon" />
-                <span className="snip-cmd">{s.command}</span>
+                <span className="snip-text">
+                  <span className="snip-label">{s.label || s.command}</span>
+                  {s.label && <span className="snip-sub">{s.command}</span>}
+                </span>
               </button>
               <button className="snip-del" onClick={() => del(s.id)} title="삭제">
                 <Icon name="close" size={12} />
@@ -69,14 +74,23 @@ export default function SnippetsPanel() {
       <form className="snip-add" onSubmit={add}>
         <input
           className="snip-input"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="명령 추가…"
+          value={draftLabel}
+          onChange={(e) => setDraftLabel(e.target.value)}
+          placeholder="라벨 (선택)"
           spellCheck={false}
         />
-        <button className="snip-addbtn" type="submit" title="추가">
-          <Icon name="plus" size={14} />
-        </button>
+        <div className="snip-add-row">
+          <input
+            className="snip-input"
+            value={draftCmd}
+            onChange={(e) => setDraftCmd(e.target.value)}
+            placeholder="명령…"
+            spellCheck={false}
+          />
+          <button className="snip-addbtn" type="submit" title="추가">
+            <Icon name="plus" size={14} />
+          </button>
+        </div>
       </form>
     </div>
   );

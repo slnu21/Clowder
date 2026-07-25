@@ -10,6 +10,10 @@ use std::path::PathBuf;
 #[serde(rename_all = "camelCase")]
 pub struct Snippet {
     pub id: String,
+    /// Optional display label; empty → show the command itself. `#[serde(default)]` keeps snippets
+    /// saved before labels existed loadable (no `label` key → empty).
+    #[serde(default)]
+    pub label: String,
     pub command: String,
 }
 

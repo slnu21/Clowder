@@ -2,23 +2,27 @@ import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import {
   kubectlContexts,
+  kubectlNamespaces,
   kubectlPods,
   kubectlUseContext,
+  kubectlUseNamespace,
   type KubeContexts,
+  type KubeNamespaces,
   type KubePod,
 } from "../../../lib/k8s";
 import { useWorkspace } from "../../workspace/store";
 
 /**
- * Kubernetes: switch the current context, and exec into a pod. Contexts come from the kubeconfig
- * (cheap); pods are loaded on demand (a cluster query, bounded in Rust). Exec is the terminal-spawn
- * verb — `kubectl exec -it <pod> -- sh` in its own pane. Fail-soft throughout.
+ * Kubernetes: switch context / namespace, and exec into or tail a pod. Contexts come from the kubeconfig
+ * (cheap); namespaces + pods are a cluster query, loaded on demand and bounded in Rust. exec/logs are the
+ * terminal-spawn verb — `kubectl exec -it … -- sh` / `kubectl logs -f …` each in their own pane.
  */
 export default function KubernetesPanel() {
   const [ctx, setCtx] = useState<KubeContexts | null>(null);
+  const [ns, setNs] = useState<KubeNamespaces | null>(null);
   const [pods, setPods] = useState<KubePod[] | null>(null);
   const [busy, setBusy] = useState(false);
-  const [podsBusy, setPodsBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const openCommandTab = useWorkspace((s) => s.openCommandTab);
 
   const refresh = useCallback(() => {
@@ -33,12 +37,27 @@ export default function KubernetesPanel() {
     return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
 
-  const switchTo = async (name: string) => {
+  const loadCluster = async () => {
+    setLoading(true);
+    try {
+      const [p, n] = await Promise.all([
+        kubectlPods().catch(() => [] as KubePod[]),
+        kubectlNamespaces().catch(() => ({ namespaces: [], current: null }) as KubeNamespaces),
+      ]);
+      setPods(p);
+      setNs(n);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchCtx = async (name: string) => {
     if (name === ctx?.current) return;
     setBusy(true);
     try {
       await kubectlUseContext(name);
-      setPods(null); // pods belong to the old context
+      setPods(null); // pods/namespaces belong to the old context
+      setNs(null);
       refresh();
     } catch {
       /* fail-soft */
@@ -47,14 +66,16 @@ export default function KubernetesPanel() {
     }
   };
 
-  const loadPods = async () => {
-    setPodsBusy(true);
+  const switchNs = async (name: string) => {
+    if (name === ns?.current) return;
+    setBusy(true);
     try {
-      setPods(await kubectlPods());
+      await kubectlUseNamespace(name);
+      await loadCluster();
     } catch {
-      setPods([]);
+      /* fail-soft */
     } finally {
-      setPodsBusy(false);
+      setBusy(false);
     }
   };
 
@@ -72,7 +93,7 @@ export default function KubernetesPanel() {
             key={c}
             className={"k8s-ctx" + (c === ctx?.current ? " on" : "")}
             disabled={busy}
-            onClick={() => switchTo(c)}
+            onClick={() => switchCtx(c)}
             title={c}
           >
             <span className="k8s-ctx-dot" />
@@ -82,14 +103,31 @@ export default function KubernetesPanel() {
       </div>
 
       <div className="k8s-pods-head">
-        <span>파드</span>
-        <button className="k8s-load" onClick={loadPods} disabled={podsBusy}>
-          {podsBusy ? "…" : "불러오기"}
+        <span>클러스터{ns?.current ? ` · ${ns.current}` : ""}</span>
+        <button className="k8s-load" onClick={loadCluster} disabled={loading}>
+          {loading ? "…" : "불러오기"}
         </button>
       </div>
+
+      {ns && ns.namespaces.length > 0 && (
+        <div className="k8s-ns">
+          {ns.namespaces.map((n) => (
+            <button
+              key={n}
+              className={"k8s-nschip" + (n === ns.current ? " on" : "")}
+              disabled={busy}
+              onClick={() => switchNs(n)}
+              title={`네임스페이스 ${n}`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="k8s-pods">
         {pods === null ? (
-          <div className="k8s-hint">현재 컨텍스트의 파드를 불러옵니다</div>
+          <div className="k8s-hint">현재 컨텍스트의 파드·네임스페이스를 불러옵니다</div>
         ) : pods.length === 0 ? (
           <div className="k8s-hint">파드 없음</div>
         ) : (
@@ -105,6 +143,13 @@ export default function KubernetesPanel() {
                 title={`kubectl exec -it ${p.name}`}
               >
                 exec
+              </button>
+              <button
+                className="k8s-exec"
+                onClick={() => openCommandTab(`kubectl logs -f ${p.name}`, `${p.name} logs`)}
+                title={`kubectl logs -f ${p.name}`}
+              >
+                logs
               </button>
             </div>
           ))
