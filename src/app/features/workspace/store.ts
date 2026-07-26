@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useSettings } from "../settings/store";
 import { focusPane, release } from "../terminal/terminalPool";
+import { forgetViewerScroll } from "../viewer/scrollMemory";
 import {
   basename,
   collectLeafIds,
@@ -132,8 +133,11 @@ export const useWorkspace = create<State>((set, get) => ({
     const s = get();
     const tab = s.tabs.find((t) => t.id === tabId);
     if (!tab) return;
-    // Free every shell this tab owned before dropping it.
-    for (const leafId of collectLeafIds(tab.root)) release(leafId);
+    // Free every shell this tab owned before dropping it, and forget where its viewers were reading.
+    for (const leafId of collectLeafIds(tab.root)) {
+      release(leafId);
+      forgetViewerScroll(leafId);
+    }
 
     const tabs = s.tabs.filter((t) => t.id !== tabId);
     if (tabs.length === 0) {
@@ -185,8 +189,9 @@ export const useWorkspace = create<State>((set, get) => ({
   },
 
   // ⚠️ INVARIANT for movePane / detachPaneToNewTab / splitPaneWith / retargetViewer:
-  // **never call `release()`**. These reshape the tree around a pane that is still running. Writing
-  // detach as "closePane + openTerminalTab" is the tempting version and it kills the shell.
+  // **never call `release()`** (nor `forgetViewerScroll`). These reshape the tree around a pane that is
+  // still running. Writing detach as "closePane + openTerminalTab" is the tempting version and it kills
+  // the shell — and forgetting the scroll offset would send a moved viewer back to the top.
   movePane: (sourceId, targetId, zone) => {
     const s = get();
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
@@ -263,6 +268,7 @@ export const useWorkspace = create<State>((set, get) => ({
     if (!tab) return;
     const root: Node | undefined = removeLeaf(tab.root, paneId);
     release(paneId);
+    forgetViewerScroll(paneId);
     if (!root) {
       get().closeTab(tab.id); // last pane gone → close the tab
       return;

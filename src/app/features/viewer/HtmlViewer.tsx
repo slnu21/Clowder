@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { sanitizeDocument } from "../../lib/sanitize";
 import { readFile } from "../../lib/tauri";
+import { trackViewerScroll } from "./scrollMemory";
 
 /**
  * HTML viewer (new — md-reader only *exports* HTML, never opens it). Reads the file, strips scripts
@@ -9,7 +10,7 @@ import { readFile } from "../../lib/tauri";
  * artifact (inline styles, data-URI assets) renders fully; anything relying on JS or relative files
  * is inert by design. Interactive HTML belongs in a real browser.
  */
-export default function HtmlViewer({ path }: { path: string }) {
+export default function HtmlViewer({ leafId, path }: { leafId: string; path: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +33,11 @@ export default function HtmlViewer({ path }: { path: string }) {
   }, [path]);
 
   const onLoad = () => {
-    iframeRef.current?.contentDocument?.addEventListener("contextmenu", (e) => e.preventDefault());
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    doc.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Same remount story as the markdown viewer — see `scrollMemory`.
+    trackViewerScroll(leafId, path, doc);
   };
 
   if (error) return <div className="viewer-error">열기 실패: {error}</div>;
