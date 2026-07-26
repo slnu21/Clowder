@@ -6,6 +6,7 @@ import { buildDoc } from "../../lib/renderDoc";
 import { sanitizeHtml } from "../../lib/sanitize";
 import { readFile } from "../../lib/tauri";
 import { useSettings } from "../settings/store";
+import { trackViewerScroll } from "./scrollMemory";
 
 /**
  * Markdown viewer: read the file, render (markdown-it → DOMPurify → relative-image inline → mermaid),
@@ -17,8 +18,12 @@ import { useSettings } from "../settings/store";
  * `srcdoc` with its tokens already resolved (an iframe gets no cascade from us) and mermaid bakes its
  * colours into the SVG, so a theme flip has to rebuild the document. Live terminals can repaint in
  * place; a rendered document cannot.
+ *
+ * Because every mount rebuilds the document from the file — which is deliberate, and the only refresh
+ * this app has — the reading position has to be remembered elsewhere: `scrollMemory`, the viewer's
+ * counterpart to the scrollback position `terminalPool` parks for a terminal.
  */
-export default function MdViewer({ path }: { path: string }) {
+export default function MdViewer({ leafId, path }: { leafId: string; path: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +73,9 @@ export default function MdViewer({ path }: { path: string }) {
         if (src) setLightbox(src);
       }
     });
+    // Last, and on every load: the document is laid out by now, so this is where the remembered offset
+    // can actually be applied (and where recording the new one starts).
+    trackViewerScroll(leafId, path, doc);
   };
 
   if (error) return <div className="viewer-error">열기 실패: {error}</div>;
