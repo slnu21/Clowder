@@ -1,4 +1,5 @@
 import Icon from "../../components/Icon";
+import { useT } from "../../lib/i18n";
 import type { RightPanelDef, RightPanelId } from "./registry";
 
 /**
@@ -15,6 +16,7 @@ export default function RailSwitch({
   active: RightPanelId;
   onPick: (id: RightPanelId) => void;
 }) {
+  const t = useT();
   return (
     <div className="rail-switch" role="tablist">
       {panels.map((p) => (
@@ -23,7 +25,7 @@ export default function RailSwitch({
           className={"rail-tab" + (p.id === active ? " on" : "")}
           role="tab"
           aria-selected={p.id === active}
-          title={p.label}
+          title={t(p.labelKey)}
           onClick={() => onPick(p.id)}
         >
           <Icon name={p.icon} size={14} />

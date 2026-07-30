@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from "../../lib/settings";
+import { setLanguage } from "../../lib/i18n";
 import { retheme } from "../terminal/terminalPool";
 
 /**
@@ -41,9 +42,11 @@ export const useSettings = create<State>((set, get) => ({
       const settings = await getSettings();
       set({ settings });
       applyAppearance(settings);
+      setLanguage(settings.language);
     } catch {
       // Keep defaults; a missing/corrupt file is not fatal — but the defaults still reach the DOM.
       applyAppearance(get().settings);
+      setLanguage(get().settings.language);
     }
   },
   update: (patch) => {
@@ -51,6 +54,8 @@ export const useSettings = create<State>((set, get) => ({
     const next = { ...prev, ...patch };
     set({ settings: next });
     void saveSettings(next);
+    // Language is its own store (`lib/i18n`) so `lib` stays a leaf; push the change into it.
+    if (next.language !== prev.language) setLanguage(next.language);
     const themed = next.theme !== prev.theme || next.accent !== prev.accent;
     // The terminal palette flips when its own axis changes, or when it follows the app and the app theme
     // moved. (Accent also re-tints the cursor, hence `themed`.)

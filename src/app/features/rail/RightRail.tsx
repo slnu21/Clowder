@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "../../lib/i18n";
 import { useFocusRefresh } from "../../lib/useFocusRefresh";
 import { useRailMode } from "../chrome/panels";
 import { useSettings } from "../settings/store";
@@ -16,6 +17,7 @@ import { RIGHT_PANELS, SESSIONS, type RightPanelDef } from "./registry";
  * by design — its 40px chrome is bespoke to sessions and ignores the panel choice.
  */
 export default function RightRail() {
+  const t = useT();
   const rail = useRailMode();
   const rightPanel = useSettings((s) => s.settings.rightPanel);
   const update = useSettings((s) => s.update);
@@ -38,7 +40,7 @@ export default function RightRail() {
         </div>
       ) : (
         <div className="pane-title">
-          {active.label}
+          {t(active.labelKey)}
           {active.Badge && <active.Badge />}
         </div>
       )}

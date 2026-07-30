@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { IconName } from "../../components/Icon";
+import type { MsgKey } from "../../lib/i18n";
 import type { RightPanelId } from "../../lib/settings";
 import { dockerOk } from "../../lib/docker";
 import { kubectlContexts } from "../../lib/k8s";
@@ -23,8 +24,10 @@ export type { RightPanelId };
  */
 export type RightPanelDef = {
   id: RightPanelId;
-  /** Korean label; also the plain header text when the switcher is hidden (a single available panel). */
-  label: string;
+  /** Catalogue key for the label — resolved at render time, not here, so switching language re-labels
+   *  the switcher without rebuilding the registry. Also the plain header text when the switcher is
+   *  hidden (a single available panel). */
+  labelKey: MsgKey;
   /** Switcher-tab glyph. Must exist in `Icon.tsx`'s closed `IconName` enum. */
   icon: IconName;
   /** Full-rail body: content only, no `<aside>`/`.pane-title`. */
@@ -41,7 +44,7 @@ export type RightPanelDef = {
  *  install prompt for the "tracking off" state, so hiding it would hide the way to turn it on. */
 export const SESSIONS: RightPanelDef = {
   id: "sessions",
-  label: "세션",
+  labelKey: "rail.sessions",
   icon: "session-link",
   Body: SessionsBody,
   Badge: SessionsBadge,
@@ -51,7 +54,7 @@ export const SESSIONS: RightPanelDef = {
  *  "kill the process on this port", the classic "port 3000 already in use" fix, inline. */
 export const PORTS: RightPanelDef = {
   id: "ports",
-  label: "포트",
+  labelKey: "rail.ports",
   icon: "ports",
   Body: PortsPanel,
   available: () => true,
@@ -61,17 +64,17 @@ export const PORTS: RightPanelDef = {
  *  machine that doesn't use ssh never sees the panel. Its verb is "connect" — spawn `ssh <host>`. */
 export const SSH: RightPanelDef = {
   id: "ssh",
-  label: "SSH",
+  labelKey: "rail.ssh",
   icon: "ssh",
   Body: SshPanel,
   available: async () => (await sshHosts()).length > 0,
 };
 
-/** Git status of the active terminal pane's folder. Always shown (it degrades to "저장소 아님" when the
- *  active pane isn't a repo). Bound to `leaf.cwd`; the live-cwd milestone upgrades it to follow `cd`. */
+/** Git status of the active terminal pane's folder. Always shown (it degrades to a "not a repository"
+ *  line when the active pane isn't a repo). Bound to `leaf.cwd`, which follows `cd` via OSC 7. */
 export const GIT: RightPanelDef = {
   id: "git",
-  label: "Git",
+  labelKey: "rail.git",
   icon: "git-branch",
   Body: GitPanel,
 };
@@ -80,7 +83,7 @@ export const GIT: RightPanelDef = {
  *  Verb: switch context, or `kubectl exec` into a pod in its own pane. */
 export const K8S: RightPanelDef = {
   id: "k8s",
-  label: "K8s",
+  labelKey: "rail.k8s",
   icon: "k8s",
   Body: KubernetesPanel,
   available: async () => (await kubectlContexts()).contexts.length > 0,
@@ -90,17 +93,17 @@ export const K8S: RightPanelDef = {
  *  daemon up), so a machine without docker never sees it. */
 export const DOCKER: RightPanelDef = {
   id: "docker",
-  label: "Docker",
+  labelKey: "rail.docker",
   icon: "docker",
   Body: DockerPanel,
   available: () => dockerOk(),
 };
 
-/** Runnable tasks (npm/make/just) in the active pane's folder. Always shown — degrades to "작업 없음"
- *  when the folder has no manifest. Its verb is "run this task in a new pane". */
+/** Runnable tasks (npm/make/just) in the active pane's folder. Always shown — degrades to a "no tasks"
+ *  line when the folder has no manifest. Its verb is "run this task in a new pane". */
 export const TASK: RightPanelDef = {
   id: "task",
-  label: "작업",
+  labelKey: "rail.task",
   icon: "play",
   Body: TaskPanel,
 };
@@ -108,7 +111,7 @@ export const TASK: RightPanelDef = {
 /** Saved command snippets, run in the active pane. Always shown (persisted locally, starts empty). */
 export const SNIPPETS: RightPanelDef = {
   id: "snippets",
-  label: "스니펫",
+  labelKey: "rail.snippets",
   icon: "bookmark",
   Body: SnippetsPanel,
 };

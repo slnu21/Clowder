@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
+import { useT } from "../../../lib/i18n";
 import { sshHosts, type SshHost } from "../../../lib/ssh";
 import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useWorkspace } from "../../workspace/store";
@@ -8,9 +9,10 @@ import { useWorkspace } from "../../workspace/store";
  * SSH hosts from `~/.ssh/config`. Clicking one **connects** — it opens a terminal tab running
  * `ssh <host>` (the config supplies HostName/User/Port). That's the shared rail verb: the panel is a
  * launcher, the terminal does the work, and after `ssh` exits you land back at a live shell. Fail-soft:
- * no config → "~/.ssh/config 없음", a missing `ssh` prints "command not found" in the pane, never here.
+ * no config → an empty-state line, a missing `ssh` prints "command not found" in the pane, never here.
  */
 export default function SshPanel() {
+  const t = useT();
   const [hosts, setHosts] = useState<SshHost[] | null>(null);
   const openCommandTab = useWorkspace((s) => s.openCommandTab);
 
@@ -28,15 +30,15 @@ export default function SshPanel() {
   return (
     <div className="ssh-list">
       <div className="ssh-head">
-        <span>SSH 호스트</span>
-        <button className="ssh-refresh" onClick={refresh} title="새로고침">
+        <span>{t("ssh.hosts")}</span>
+        <button className="ssh-refresh" onClick={refresh} title={t("common.refresh")}>
           <Icon name="refresh" size={13} />
         </button>
       </div>
       {hosts === null ? (
-        <div className="placeholder">읽는 중…</div>
+        <div className="placeholder">{t("common.loading")}</div>
       ) : hosts.length === 0 ? (
-        <div className="placeholder">~/.ssh/config 없음</div>
+        <div className="placeholder">{t("ssh.noConfig")}</div>
       ) : (
         <div className="ssh-rows">
           {hosts.map((h, i) => (

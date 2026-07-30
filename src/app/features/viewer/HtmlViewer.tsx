@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useT } from "../../lib/i18n";
 import { sanitizeDocument } from "../../lib/sanitize";
 import { readFile } from "../../lib/tauri";
 import { trackViewerScroll } from "./scrollMemory";
@@ -12,6 +13,7 @@ import { trackViewerScroll } from "./scrollMemory";
  */
 export default function HtmlViewer({ leafId, path }: { leafId: string; path: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,7 +42,7 @@ export default function HtmlViewer({ leafId, path }: { leafId: string; path: str
     trackViewerScroll(leafId, path, doc);
   };
 
-  if (error) return <div className="viewer-error">열기 실패: {error}</div>;
+  if (error) return <div className="viewer-error">{t("viewer.openFailed", { error })}</div>;
   return (
     <div className="viewer">
       <iframe ref={iframeRef} className="viewer-frame" sandbox="allow-same-origin" title={path} onLoad={onLoad} />

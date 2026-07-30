@@ -1,4 +1,5 @@
 import { invoke } from "./invoke";
+import type { LanguageSetting } from "./i18n";
 
 /** Mirrors Rust `settings::Settings` (camelCase). */
 export type Settings = {
@@ -22,6 +23,8 @@ export type Settings = {
   accent: string;
   /** Chrome scale, 0.9–1.5. Multiplies every size token; the terminal is a separate axis. */
   uiScale: number;
+  /** UI language. `"auto"` follows the OS/WebView locale; see `lib/i18n.ts`. */
+  language: LanguageSetting;
   /** Is the left panel (explorer/workspace) shown? */
   leftPanel: boolean;
   /**
@@ -55,6 +58,7 @@ export const DEFAULT_SETTINGS: Settings = {
   terminalTheme: "dark",
   accent: "amber",
   uiScale: 1,
+  language: "auto",
   leftPanel: true,
   rightRail: null,
   rightPanel: "sessions",

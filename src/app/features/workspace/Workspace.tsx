@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Icon from "../../components/Icon";
+import { useT } from "../../lib/i18n";
 import TileTree from "./TileTree";
 import Welcome from "./Welcome";
 import { useDrag } from "./dragStore";
@@ -10,6 +11,7 @@ import { useWorkspace } from "./store";
  * hidden tabs' terminals stay alive in the pool, so switching back is instant and lossless.
  */
 export default function Workspace() {
+  const t = useT();
   const tabs = useWorkspace((s) => s.tabs);
   const activeTabId = useWorkspace((s) => s.activeTabId);
   const setActiveTab = useWorkspace((s) => s.setActiveTab);
@@ -18,7 +20,7 @@ export default function Workspace() {
   const detachPaneToNewTab = useWorkspace((s) => s.detachPaneToNewTab);
   const [detachArmed, setDetachArmed] = useState(false);
 
-  const active = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
+  const active = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
 
   return (
     <main className="pane workspace">
@@ -45,27 +47,27 @@ export default function Workspace() {
           detachPaneToNewTab(payload.paneId);
         }}
       >
-        {tabs.map((t) => (
+        {tabs.map((tab) => (
           <div
-            key={t.id}
-            className={"tab" + (t.id === activeTabId ? " active" : "")}
-            onMouseDown={() => setActiveTab(t.id)}
-            title={t.title}
+            key={tab.id}
+            className={"tab" + (tab.id === activeTabId ? " active" : "")}
+            onMouseDown={() => setActiveTab(tab.id)}
+            title={tab.title}
           >
-            <span className="tab-title">{t.title}</span>
+            <span className="tab-title">{tab.title}</span>
             <button
               className="tab-close"
-              title="탭 닫기"
+              title={t("workspace.closeTab")}
               onMouseDown={(e) => {
                 e.stopPropagation();
-                closeTab(t.id);
+                closeTab(tab.id);
               }}
             >
               <Icon name="close" size={13} />
             </button>
           </div>
         ))}
-        <button className="tab-new" title="새 탭" onClick={newTab}>
+        <button className="tab-new" title={t("workspace.newTab")} onClick={newTab}>
           <Icon name="plus" size={14} />
         </button>
       </div>

@@ -10,6 +10,7 @@ import {
   type KubeNamespaces,
   type KubePod,
 } from "../../../lib/k8s";
+import { useT } from "../../../lib/i18n";
 import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useWorkspace } from "../../workspace/store";
 
@@ -19,6 +20,7 @@ import { useWorkspace } from "../../workspace/store";
  * terminal-spawn verb — `kubectl exec -it … -- sh` / `kubectl logs -f …` each in their own pane.
  */
 export default function KubernetesPanel() {
+  const t = useT();
   const [ctx, setCtx] = useState<KubeContexts | null>(null);
   const [ns, setNs] = useState<KubeNamespaces | null>(null);
   const [pods, setPods] = useState<KubePod[] | null>(null);
@@ -82,8 +84,8 @@ export default function KubernetesPanel() {
   return (
     <div className="k8s-panel">
       <div className="k8s-head">
-        <span>컨텍스트</span>
-        <button className="k8s-refresh" onClick={refresh} title="새로고침">
+        <span>{t("k8s.context")}</span>
+        <button className="k8s-refresh" onClick={refresh} title={t("common.refresh")}>
           <Icon name="refresh" size={13} />
         </button>
       </div>
@@ -103,9 +105,12 @@ export default function KubernetesPanel() {
       </div>
 
       <div className="k8s-pods-head">
-        <span>클러스터{ns?.current ? ` · ${ns.current}` : ""}</span>
+        <span>
+          {t("k8s.cluster")}
+          {ns?.current ? ` · ${ns.current}` : ""}
+        </span>
         <button className="k8s-load" onClick={loadCluster} disabled={loading}>
-          {loading ? "…" : "불러오기"}
+          {loading ? "…" : t("k8s.load")}
         </button>
       </div>
 
@@ -117,7 +122,7 @@ export default function KubernetesPanel() {
               className={"k8s-nschip" + (n === ns.current ? " on" : "")}
               disabled={busy}
               onClick={() => switchNs(n)}
-              title={`네임스페이스 ${n}`}
+              title={t("k8s.namespace", { n })}
             >
               {n}
             </button>
@@ -127,9 +132,9 @@ export default function KubernetesPanel() {
 
       <div className="k8s-pods">
         {pods === null ? (
-          <div className="k8s-hint">현재 컨텍스트의 파드·네임스페이스를 불러옵니다</div>
+          <div className="k8s-hint">{t("k8s.hint")}</div>
         ) : pods.length === 0 ? (
-          <div className="k8s-hint">파드 없음</div>
+          <div className="k8s-hint">{t("k8s.noPods")}</div>
         ) : (
           pods.map((p) => (
             <div key={p.name} className="k8s-pod">

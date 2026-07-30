@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
+import { useT } from "../../../lib/i18n";
 import { killProcess, listPorts, type PortRow } from "../../../lib/ports";
 import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 
@@ -7,9 +8,10 @@ import { useFocusRefresh } from "../../../lib/useFocusRefresh";
  * Listening TCP ports with their owning process, and a kill button per row. On-demand (fetch on mount,
  * on window focus, and on manual refresh) rather than a push poller — port churn isn't permission-
  * prompt urgent, and on-demand keeps this to two Rust commands and zero threads. Fully fail-soft: an
- * empty/failed read shows "수신 포트 없음", a kill that doesn't take shows "실패" on the row.
+ * empty/failed read shows an empty-state line, a kill that doesn't take marks the row failed.
  */
 export default function PortsPanel() {
+  const t = useT();
   const [rows, setRows] = useState<PortRow[] | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [failed, setFailed] = useState<number | null>(null);
@@ -49,24 +51,31 @@ export default function PortsPanel() {
   return (
     <div className="ports-list">
       <div className="ports-head">
-        <span>수신 포트</span>
+        <span>{t("ports.title")}</span>
         <div className="ports-head-actions">
           <button
             className={"ports-sys" + (showSystem ? " on" : "")}
             onClick={() => setShowSystem((v) => !v)}
-            title={showSystem ? "시스템 포트 숨기기" : `시스템 포트 표시${sysCount ? ` (${sysCount})` : ""}`}
+            title={
+              showSystem
+                ? t("ports.hideSystem")
+                : sysCount
+                  ? t("ports.showSystemN", { n: sysCount })
+                  : t("ports.showSystem")
+            }
           >
-            시스템{!showSystem && sysCount ? ` ${sysCount}` : ""}
+            {t("ports.system")}
+            {!showSystem && sysCount ? ` ${sysCount}` : ""}
           </button>
-          <button className="ports-refresh" onClick={refresh} title="새로고침">
+          <button className="ports-refresh" onClick={refresh} title={t("common.refresh")}>
             <Icon name="refresh" size={13} />
           </button>
         </div>
       </div>
       {rows === null ? (
-        <div className="placeholder">읽는 중…</div>
+        <div className="placeholder">{t("common.loading")}</div>
       ) : shown.length === 0 ? (
-        <div className="placeholder">{all.length === 0 ? "수신 포트 없음" : "사용자 포트 없음"}</div>
+        <div className="placeholder">{all.length === 0 ? t("ports.none") : t("ports.noneUser")}</div>
       ) : (
         <div className="ports-rows">
           {shown.map((r) => (
@@ -82,9 +91,9 @@ export default function PortsPanel() {
                 className="port-kill"
                 onClick={() => kill(r.pid)}
                 disabled={busy === r.pid}
-                title={`PID ${r.pid} 종료`}
+                title={t("ports.killTitle", { pid: r.pid })}
               >
-                {busy === r.pid ? "…" : failed === r.pid ? "실패" : "종료"}
+                {busy === r.pid ? "…" : failed === r.pid ? t("ports.failed") : t("ports.kill")}
               </button>
             </div>
           ))}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
+import { useT } from "../../lib/i18n";
 import type { Entry } from "../../lib/tauri";
 import SettingsPopover from "../settings/SettingsPopover";
 import { viewerKindFor } from "../workspace/model";
@@ -22,6 +23,7 @@ export default function Explorer({
   onOpenTerminal: (cwd: string) => void;
   onOpenFile: (path: string, kind: "md" | "html") => void;
 }) {
+  const t = useT();
   const [tab, setTab] = useState<"explorer" | "workspace">("explorer");
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null);
   const request = useExplorer((s) => s.request);
@@ -47,7 +49,7 @@ export default function Explorer({
           onClick={() => setTab("explorer")}
         >
           <Icon name="folder" size={13} />
-          탐색기
+          {t("explorer.tab")}
         </button>
         <button
           type="button"
@@ -76,7 +78,7 @@ export default function Explorer({
               setMenu(null);
             }}
           >
-            여기서 터미널 열기
+            {t("explorer.openTerminalHere")}
           </button>
           {(() => {
             const kind = menu.entry.isDir ? null : viewerKindFor(menu.entry.name);
@@ -88,7 +90,7 @@ export default function Explorer({
                   setMenu(null);
                 }}
               >
-                열기 (뷰어)
+                {t("explorer.openInViewer")}
               </button>
             );
           })()}

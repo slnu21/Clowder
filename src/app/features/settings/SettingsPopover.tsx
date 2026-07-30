@@ -2,18 +2,27 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Icon from "../../components/Icon";
+import { useT } from "../../lib/i18n";
 import { useSettings } from "./store";
 
 /** Accent choices — key persisted to settings, swatch shown in the picker (dark-mode hex as reference). */
 const ACCENTS = [
-  { key: "amber", label: "앰버", swatch: "#c8a15c" },
-  { key: "sage", label: "세이지", swatch: "#9fae7a" },
-  { key: "clay", label: "클레이", swatch: "#c78a6a" },
-  { key: "neutral", label: "뉴트럴", swatch: "#b8b1a4" },
+  { key: "amber", labelKey: "settings.accentAmber", swatch: "#c8a15c" },
+  { key: "sage", labelKey: "settings.accentSage", swatch: "#9fae7a" },
+  { key: "clay", labelKey: "settings.accentClay", swatch: "#c78a6a" },
+  { key: "neutral", labelKey: "settings.accentNeutral", swatch: "#b8b1a4" },
 ] as const;
 
 /** Chrome scale presets. Fixed rungs, not a free field — see the note where they're rendered. */
 const UI_SCALES = [0.9, 1, 1.15, 1.3, 1.5] as const;
+
+/** Language choices. The names are written in their own language, as is conventional — a reader who
+ *  needs "English" cannot necessarily read "영어". */
+const LANGUAGES = [
+  { key: "auto", label: null },
+  { key: "ko", label: "한국어" },
+  { key: "en", label: "English" },
+] as const;
 
 /**
  * The whole settings surface: a gear button that opens one popover (no settings window, no SQLite —
@@ -23,6 +32,7 @@ const UI_SCALES = [0.9, 1, 1.15, 1.3, 1.5] as const;
  * Shell / font / size / scrollback apply to **newly opened** terminals; existing panes keep theirs.
  */
 export default function SettingsPopover() {
+  const t = useT();
   const [openState, setOpenState] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const gearRef = useRef<HTMLButtonElement>(null);
@@ -53,9 +63,9 @@ export default function SettingsPopover() {
   useEffect(() => {
     if (!openState) return;
     const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
+      const target = e.target as Node;
       // The popover is portalled out of the wrap, so check both the gear and the popover.
-      if (gearRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      if (gearRef.current?.contains(target) || popRef.current?.contains(target)) return;
       setOpenState(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpenState(false);
@@ -82,7 +92,7 @@ export default function SettingsPopover() {
         ref={gearRef}
         type="button"
         className="settings-gear"
-        title="설정"
+        title={t("settings.title")}
         aria-expanded={openState}
         onClick={() => setOpenState((v) => !v)}
       >
@@ -94,14 +104,14 @@ export default function SettingsPopover() {
           <div
             className="settings-pop"
             role="dialog"
-            aria-label="설정"
+            aria-label={t("settings.title")}
             ref={popRef}
             style={{ top: pos.top, left: pos.left }}
           >
-          <div className="set-group">모양</div>
+          <div className="set-group">{t("settings.groupAppearance")}</div>
 
           <div className="set-row">
-            <span>테마</span>
+            <span>{t("settings.theme")}</span>
             <div className="set-seg">
               {(["dark", "light"] as const).map((k) => (
                 <button
@@ -111,21 +121,21 @@ export default function SettingsPopover() {
                   className={s.theme === k ? "on" : ""}
                   onClick={() => update({ theme: k })}
                 >
-                  {k === "dark" ? "다크" : "라이트"}
+                  {k === "dark" ? t("settings.themeDark") : t("settings.themeLight")}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="set-row">
-            <span>액센트</span>
+            <span>{t("settings.accent")}</span>
             <div className="set-accent">
               {ACCENTS.map((a) => (
                 <button
                   key={a.key}
                   type="button"
-                  title={a.label}
-                  aria-label={a.label}
+                  title={t(a.labelKey)}
+                  aria-label={t(a.labelKey)}
                   aria-pressed={s.accent === a.key}
                   className={s.accent === a.key ? "on" : ""}
                   style={{ ["--sw"]: a.swatch } as React.CSSProperties}
@@ -138,7 +148,7 @@ export default function SettingsPopover() {
           {/* Full-width row: five presets don't fit beside a label, so the segment gets its own line and
               the buttons share the width evenly. */}
           <div className="set-row set-col">
-            <span>UI 크기</span>
+            <span>{t("settings.uiScale")}</span>
             {/* Presets, not a free number: 1.37 lands no step on a whole pixel and the hinting turns to
                 mush. Chrome only — the terminal keeps its own font size. */}
             <div className="set-seg">
@@ -156,10 +166,27 @@ export default function SettingsPopover() {
             </div>
           </div>
 
-          <div className="set-group">셸</div>
+          <div className="set-row">
+            <span>{t("settings.language")}</span>
+            <div className="set-seg">
+              {LANGUAGES.map((l) => (
+                <button
+                  key={l.key}
+                  type="button"
+                  aria-pressed={s.language === l.key}
+                  className={s.language === l.key ? "on" : ""}
+                  onClick={() => update({ language: l.key })}
+                >
+                  {l.label ?? t("settings.languageAuto")}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="set-group">{t("settings.groupShell")}</div>
 
           <div className="set-row">
-            <span>기본 셸</span>
+            <span>{t("settings.defaultShell")}</span>
             <div className="set-seg">
               {(["bash", "powershell"] as const).map((k) => (
                 <button
@@ -176,12 +203,12 @@ export default function SettingsPopover() {
           </div>
 
           <div className="set-row">
-            <span>Git Bash 경로</span>
+            <span>{t("settings.gitBashPath")}</span>
             <span className="set-pathpick">
               <input
                 type="text"
                 value={s.gitBashPath ?? ""}
-                placeholder="자동 탐색"
+                placeholder={t("settings.autoDetect")}
                 onChange={(e) => update({ gitBashPath: e.target.value || null })}
               />
               <button
@@ -191,15 +218,15 @@ export default function SettingsPopover() {
                   if (p) update({ gitBashPath: p });
                 }}
               >
-                찾기
+                {t("common.browse")}
               </button>
             </span>
           </div>
 
-          <div className="set-group">터미널</div>
+          <div className="set-group">{t("settings.groupTerminal")}</div>
 
-          <div className="set-row" title="터미널 색은 앱 테마와 별개입니다. 대부분의 CLI 색상표가 어두운 배경 기준이라 라이트 앱에서도 다크 터미널이 잘 보입니다.">
-            <span>테마</span>
+          <div className="set-row" title={t("settings.termThemeTitle")}>
+            <span>{t("settings.theme")}</span>
             <div className="set-seg">
               {(["follow", "dark", "light"] as const).map((k) => (
                 <button
@@ -209,14 +236,18 @@ export default function SettingsPopover() {
                   className={s.terminalTheme === k ? "on" : ""}
                   onClick={() => update({ terminalTheme: k })}
                 >
-                  {k === "follow" ? "앱 따라" : k === "dark" ? "다크" : "라이트"}
+                  {k === "follow"
+                    ? t("settings.termFollow")
+                    : k === "dark"
+                      ? t("settings.themeDark")
+                      : t("settings.themeLight")}
                 </button>
               ))}
             </div>
           </div>
 
           <label className="set-row">
-            <span>글꼴</span>
+            <span>{t("settings.font")}</span>
             <input
               type="text"
               value={s.terminalFont}
@@ -231,7 +262,7 @@ export default function SettingsPopover() {
           </datalist>
 
           <label className="set-row">
-            <span>크기</span>
+            <span>{t("settings.size")}</span>
             <input
               type="number"
               min={8}
@@ -242,7 +273,7 @@ export default function SettingsPopover() {
           </label>
 
           <label className="set-row">
-            <span>스크롤백</span>
+            <span>{t("settings.scrollback")}</span>
             <input
               type="number"
               min={100}
@@ -253,15 +284,15 @@ export default function SettingsPopover() {
             />
           </label>
 
-          <div className="set-group">탐색기</div>
+          <div className="set-group">{t("settings.groupExplorer")}</div>
 
           <div className="set-row">
-            <span>시작 경로</span>
+            <span>{t("settings.startPath")}</span>
             <span className="set-pathpick">
               <input
                 type="text"
                 value={s.startPath ?? ""}
-                placeholder="홈"
+                placeholder={t("settings.home")}
                 onChange={(e) => update({ startPath: e.target.value || null })}
               />
               <button
@@ -271,20 +302,20 @@ export default function SettingsPopover() {
                   if (p) update({ startPath: p });
                 }}
               >
-                찾기
+                {t("common.browse")}
               </button>
             </span>
           </div>
 
           <div className="set-row set-col">
-            <span>즐겨찾기</span>
+            <span>{t("common.favorites")}</span>
             <div className="set-favs">
               {s.favorites.map((f) => (
                 <div className="set-fav" key={f} title={f}>
                   <span className="set-fav-path">{f}</span>
                   <button
                     type="button"
-                    title="제거"
+                    title={t("common.remove")}
                     onClick={() => update({ favorites: s.favorites.filter((x) => x !== f) })}
                   >
                     <Icon name="close" size={13} />
@@ -299,15 +330,12 @@ export default function SettingsPopover() {
                   if (p && !s.favorites.includes(p)) update({ favorites: [...s.favorites, p] });
                 }}
               >
-                + 추가
+                {t("settings.addFavorite")}
               </button>
             </div>
           </div>
 
-          <div className="set-note">
-            UI 크기·테마·액센트는 즉시 적용됩니다. 터미널 글꼴·크기는 별개 설정이고, 셸·스크롤백과 함께
-            새로 여는 터미널부터 반영됩니다.
-          </div>
+          <div className="set-note">{t("settings.footer")}</div>
           </div>,
           document.body,
         )}
