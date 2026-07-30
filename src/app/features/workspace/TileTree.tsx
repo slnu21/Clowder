@@ -191,6 +191,10 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
           leaf.content === "terminal"
             ? (e) => {
                 e.preventDefault();
+                // `terminalPool` stops button-2 `mousedown` before it reaches the app (it would make a
+                // TUI drop its selection), and that also stops the tile's `onMouseDown` — so activating
+                // the pane happens here instead. `setActivePane` focuses the terminal on the way.
+                setActivePane(leaf.id);
                 // A selection right after a Shift+drag copies straight away (the Windows Terminal
                 // reflex); with nothing selected, open the menu — the only way to lift text out of a
                 // mouse-mode fullscreen TUI, where a drag is sent to the app instead of selecting.
@@ -224,9 +228,13 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
 
 /**
  * The terminal right-click menu — shown only when there is no selection to copy. Its reason to exist is
- * the fullscreen TUI: with mouse tracking on, a drag never becomes a selection, so "복사" here selects the
- * buffer first (the visible screen, since the alternate screen has no scrollback). Portalled to `<body>`
- * so a small or nested pane can't clip it; closes on an outside click or Esc.
+ * the fullscreen TUI: with mouse tracking on, a plain drag never becomes a selection, so "화면 복사" here
+ * selects the **viewport** first (see `copyView` — it used to take the whole buffer, which on a normal
+ * pane meant thousands of scrollback lines). Portalled to `<body>` so a small or nested pane can't clip
+ * it; closes on an outside click or Esc.
+ *
+ * With OSC 52 now handled, a TUI that copies on its own — Claude Code does — lands in the clipboard
+ * without this menu at all. It stays for the programs that don't.
  */
 function TerminalMenu({
   leafId,
@@ -265,7 +273,7 @@ function TerminalMenu({
 
   return createPortal(
     <div className="ctx term-ctx" style={{ left: x, top: y }} ref={ref}>
-      <button onClick={() => { void copyView(leafId); onClose(); }}>복사</button>
+      <button onClick={() => { void copyView(leafId); onClose(); }}>화면 복사</button>
       <button onClick={() => { void pasteInto(leafId); onClose(); }}>붙여넣기</button>
       <button onClick={() => { selectAllPane(leafId); onClose(); }}>모두 선택</button>
       <div className="ctx-hint">Shift+드래그로 부분 선택</div>
