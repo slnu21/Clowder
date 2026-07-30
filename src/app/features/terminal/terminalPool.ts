@@ -3,6 +3,7 @@ import { Terminal as Xterm, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { copyText, pasteText } from "../../lib/clipboard";
 import { openTarget } from "../../lib/openTarget";
+import { osc52ToText } from "../../lib/osc52";
 import { osc7ToPath } from "../../lib/osc7";
 import { ptyClose, ptyResize, ptySpawn, ptyWrite, resolveLinkTarget } from "../../lib/tauri";
 import { resolveShell } from "../../lib/settings";
@@ -101,30 +102,76 @@ export function retheme(): void {
  *
  * `Ctrl+C` is the interesting one: it has to stay `^C` — interrupting a runaway command is the single
  * most important key in a terminal — but when there *is* a selection, nobody means "interrupt". So it
- * copies only in that case, exactly when `^C` would have had nothing to interrupt anyway.
+ * copies only in that case, exactly when `^C` would have had nothing to interrupt anyway. **And it
+ * clears the selection afterwards**, which is not cosmetic: while a selection sits there, every
+ * subsequent `Ctrl+C` is absorbed as a copy and the pane cannot be interrupted at all. That is worst
+ * exactly where it hurts most — a fullscreen TUI, where the highlight is easy to forget about.
  *
- * `Ctrl+V` is deliberately left alone: PSReadLine and readline both handle it themselves, and
- * intercepting it would break paste inside their line editors. `Ctrl+Shift+V` is ours.
+ * `Ctrl+V` **is** intercepted, reversing an earlier decision. The old reasoning was that PSReadLine
+ * and readline handle it themselves, so leaving it alone kept paste working inside their line editors.
+ * That was wrong in both directions: xterm maps ctrl+letter to a control code, so plain `Ctrl+V` was
+ * sending `\x16` (readline's `quoted-insert`) and cancelling the browser's own paste on the way out —
+ * it pasted nowhere. And a fullscreen TUI has no line editor for the argument to apply to. Windows
+ * Terminal pastes on `Ctrl+V`; so do we. `Ctrl+Shift+V` stays as an alias, and `Ctrl+Insert` /
+ * `Shift+Insert` come along because they cost nothing.
  *
- * Returning `false` tells xterm to swallow the event instead of sending it to the shell.
+ * `preventDefault()` on every path we claim: returning `false` stops xterm, but WebView2's *native*
+ * copy/paste for the same chord still fires afterwards — which made `Ctrl+Shift+V` paste twice.
  */
 function clipboardKeys(term: Xterm): (e: KeyboardEvent) => boolean {
   return (e) => {
-    if (e.type !== "keydown" || !e.ctrlKey || e.altKey) return true;
-    const key = e.key.toLowerCase();
-    if (key === "c" && (e.shiftKey || term.hasSelection())) {
+    if (e.type !== "keydown" || e.altKey) return true;
+
+    const copy = () => {
       void copyText(term.getSelection());
+      term.clearSelection();
+    };
+    // `term.paste` and not `ptyWrite`: it wraps the text in bracketed-paste markers when the app asked
+    // for them, which is how a multi-line paste lands as one block instead of running every line as a
+    // separate command.
+    const paste = () => void pasteText().then((t) => t && term.paste(t));
+
+    // Insert-key pair first: these carry no ctrl+letter meaning to preserve.
+    if (e.key === "Insert" && (e.ctrlKey || e.shiftKey) && !(e.ctrlKey && e.shiftKey)) {
+      if (e.ctrlKey && !term.hasSelection()) return true; // nothing to copy — leave the key alone
+      e.preventDefault();
+      if (e.ctrlKey) copy();
+      else paste();
       return false;
     }
-    if (key === "v" && e.shiftKey) {
-      // `term.paste` and not `ptyWrite`: it wraps the text in bracketed-paste markers when the app
-      // asked for them, which is how a multi-line paste lands as one block instead of running every
-      // line as a separate command.
-      void pasteText().then((t) => t && term.paste(t));
+
+    if (!e.ctrlKey) return true;
+    const key = e.key.toLowerCase();
+
+    if (key === "c" && (e.shiftKey || term.hasSelection())) {
+      e.preventDefault();
+      copy();
+      return false;
+    }
+    if (key === "v") {
+      e.preventDefault();
+      paste();
       return false;
     }
     return true;
   };
+}
+
+/**
+ * OSC 52 — the program asks the terminal to put text on the clipboard.
+ *
+ * **This is what made "Claude Code says copied but the clipboard is empty" happen.** A fullscreen TUI
+ * talks to a pipe, not a window, so it cannot reach the clipboard itself; OSC 52 is how it asks. There
+ * was no handler for it, and an unhandled OSC sequence is silently dropped by xterm's parser — so the
+ * copy went nowhere and nothing was printed either. Parsing and the refusal rules live in `osc52.ts`
+ * (pure, tested); this is just the wiring.
+ */
+function registerClipboardOsc(term: Xterm): void {
+  term.parser.registerOscHandler(52, (data) => {
+    const text = osc52ToText(data);
+    if (text) void copyText(text);
+    return true; // consumed either way — a clipboard request must never fall through as visible text
+  });
 }
 
 /**
@@ -253,6 +300,7 @@ export function acquire(
   // change up to the leaf so the git panel, titles and same-dir splits follow `cd`.
   let liveCwd = cwd;
   registerLinks(term, () => liveCwd);
+  registerClipboardOsc(term);
   term.parser.registerOscHandler(7, (data) => {
     const next = osc7ToPath(data);
     if (next && next !== liveCwd) {
@@ -262,6 +310,26 @@ export function acquire(
     return true; // consumed — never let a cwd report fall through as visible text
   });
   term.open(el);
+
+  // **A right-click must not reach the application.**
+  //
+  // With mouse tracking on (`?1000h` and friends) xterm forwards every button to the PTY — button 2
+  // included — and a fullscreen TUI reads that press as a click and drops its own selection. That was
+  // the reported sequence exactly: drag to select inside Claude Code, right-click to copy, and the
+  // selection is already gone by the time the menu opens. Windows Terminal doesn't forward right-click
+  // either; the button belongs to the terminal's own UI, not to the program.
+  //
+  // Capture phase on the host so this runs before xterm's `mousedown` listener on a descendant.
+  // `stopPropagation` only, no `preventDefault`: `contextmenu` is a separate event and still fires, so
+  // the menu keeps working. It does mean React's `onMouseDown` on the tile never sees the event either
+  // — `TileTree`'s `onContextMenu` sets the active pane instead.
+  el.addEventListener(
+    "mousedown",
+    (e) => {
+      if (e.button === 2) e.stopPropagation();
+    },
+    true,
+  );
 
   const entry: PoolEntry = { term, fit, el, ptyId: null, released: false };
   pool.set(leafId, entry);
@@ -402,17 +470,28 @@ export function paneHasSelection(leafId: string): boolean {
 }
 
 /**
- * Copy the current selection, or — when there is none — the whole buffer. This is the escape hatch for a
- * **fullscreen TUI**: an app that turns on mouse tracking (Claude Code does) makes xterm forward drags to
+ * Copy the current selection, or — when there is none — **the visible screen**. The escape hatch for a
+ * fullscreen TUI: an app that turns on mouse tracking (Claude Code does) makes xterm forward drags to
  * the app instead of selecting, so `hasSelection()` stays false and the ordinary copy paths have nothing
- * to copy. In the alternate screen there is no scrollback, so "the whole buffer" is exactly the visible
- * screen — which is what someone wants to lift out of a TUI. Shift+drag still makes a partial selection.
+ * to take.
+ *
+ * It used to be `selectAll()`, justified by "the alternate screen has no scrollback, so the whole buffer
+ * *is* the visible screen". True for the alternate screen and wrong everywhere else — on a normal buffer
+ * it quietly copied up to 5000 lines of scrollback. And even in a TUI the complaint was that it copies
+ * too much: the whole screen when a few lines were wanted. `selectLines` over the viewport is the honest
+ * version of what the menu item claims, and the menu now says "화면 복사" rather than "복사".
+ *
+ * Trailing blank lines are dropped: a TUI pads its screen to the bottom, and pasting that padding is the
+ * "일일이 다 지워야" part.
  */
 export async function copyView(leafId: string): Promise<void> {
   const term = pool.get(leafId)?.term;
   if (!term) return;
-  if (!term.hasSelection()) term.selectAll();
-  const text = term.getSelection();
+  if (!term.hasSelection()) {
+    const top = term.buffer.active.viewportY;
+    term.selectLines(top, top + term.rows - 1);
+  }
+  const text = term.getSelection().replace(/\s+$/, "");
   if (text) await copyText(text);
   term.clearSelection();
 }
