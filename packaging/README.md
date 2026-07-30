@@ -13,14 +13,16 @@
 
 ## 1) MSIX — 주 배포 (Microsoft Store)
 ```powershell
-# Store 업로드용(미서명 — Microsoft가 재서명):
-pwsh packaging/pack-msix.ps1
-#   -> packaging/build/Clowder_0.1.0_x64.msix
+# Store 업로드용(미서명 — Microsoft가 재서명). 실신원은 아래 "Store 제출 시" 형태로 넘긴다:
+.\packaging\pack-msix.ps1
+#   -> packaging/build/Clowder_<ver>_x64.msix   (<ver> = tauri.conf.json의 version)
 
 # 로컬 설치·테스트용(자체 서명):
-pwsh packaging/pack-msix.ps1 -Sign
+.\packaging\pack-msix.ps1 -Sign
 #   -> 안내되는 두 줄을 관리자 PowerShell에서 실행하면 설치됨.
 ```
+> ⚠️ `pwsh`(PowerShell 7)가 없는 머신에서는 그냥 **Windows PowerShell 5.1로 실행**한다(`& .\packaging\pack-msix.ps1 …`).
+> 스크립트가 의도적으로 ASCII-only로 작성돼 5.1에서도 그대로 돈다.
 - Tauri는 MSI/NSIS만 내므로 **빌드된 exe를 MSIX로 래핑**(makeappx). 매니페스트: `msix/AppxManifest.template.xml`
   (DisplayName=`Clowder`, full-trust `runFullTrust`). full-trust라야 전체 탐색기(`std::fs` 임의경로)와
   셸/ConPTY 실행이 유지된다(AppContainer면 차단).
@@ -28,13 +30,14 @@ pwsh packaging/pack-msix.ps1 -Sign
   조용히 폴백한다.
 - **WebView2**: 별도 `PackageDependency`를 선언하지 않고 Windows 11 내장 런타임에 의존(md-reader 선례와 동일).
   구형 OS 지원이 필요해지면 매니페스트에 WebView2 `PackageDependency` 추가 검토.
-- **Store 제출 시** Partner Center에서 앱 이름 예약 후, 받은 값으로:
+- **Store 제출 시** — 이 앱의 실신원은 **이미 확정**돼 있다(Partner Center 예약 완료, Store 게시됨):
   ```powershell
-  pwsh packaging/pack-msix.ps1 `
-    -IdentityName "<Partner Center Identity Name>" `
-    -Publisher   "CN=<Partner Center Publisher ID>" `
-    -PublisherDisplay "<게시자 표시 이름>"
+  .\packaging\pack-msix.ps1 `
+    -IdentityName "SlnU.Clowder" `
+    -Publisher   "CN=1398342C-A2D7-4B4A-BFE2-34D8CCFD7FBA" `
+    -PublisherDisplay "SlnU"
   ```
+  기본값(`CN=SlnU`)으로 만들면 Store가 거부하므로 **업데이트마다 위 세 값을 넘겨야 한다.**
   생성된 미서명 `.msix`를 업로드(재서명은 Microsoft가 처리 → 코드서명 인증서 불필요).
 - **개인정보 처리방침**: Store는 공개 URL을 요구한다. 루트 `PRIVACY.md`를 공개 위치(예: SlnU-blog)에 호스팅하고
   그 URL을 제출 폼에 기입.
@@ -42,13 +45,17 @@ pwsh packaging/pack-msix.ps1 -Sign
 ## 2) NSIS 인스톨러 (GitHub 릴리스 사이드 채널)
 ```powershell
 cd src
-npx tauri build   # 기본 번들에 NSIS/MSI 포함
-#   -> D:\build\deck\release\bundle\nsis\Clowder_0.1.0_x64-setup.exe
-#   -> D:\build\deck\release\bundle\msi\Clowder_0.1.0_x64_en-US.msi
+npm run tauri build   # 기본 번들에 NSIS/MSI 포함
+#   -> D:\build\deck\release\bundle\nsis\Clowder_<ver>_x64-setup.exe
+#   -> D:\build\deck\release\bundle\msi\Clowder_<ver>_x64_en-US.msi
 ```
 
 ## 릴리스 전 체크
 - [x] **CSP 하드닝** — `app.security.csp` 적용(원격 차단, `script-src 'self'`).
 - [x] **LICENSE / THIRD-PARTY-NOTICES / PRIVACY** — 루트에 존재(전부 permissive, 상업 사용 허용).
-- [ ] 버전 = `tauri.conf.json`·`Cargo.toml`·`package.json` 동기(현재 `0.1.0`), 배포 커밋 후 git 태그(`vX.Y.Z`).
-- [ ] 실신원 MSIX는 Partner Center 예약 후 재빌드(위 `-IdentityName`/`-Publisher`).
+- [x] 실신원 MSIX 값 확정 — `SlnU.Clowder` / `CN=1398342C-A2D7-4B4A-BFE2-34D8CCFD7FBA` / `SlnU`(위 명령에 그대로).
+- [ ] **버전 = 6줄 동기** — `tauri.conf.json`·`Cargo.toml`·`package.json` **+ 락파일 2개**(`package-lock.json`의 clowder 항목 **2곳**, `Cargo.lock`의 clowder 스탠자). 배포 커밋 후 git 태그(`vX.Y.Z`).
+  - ⚠️ **전역 치환 금지** — 의존성에 같은 버전이 있다(`points-on-path@0.2.1`, `windows-link 0.2.1` 등). 바뀐 줄이 정확히 6줄인지 `git diff`로 확인한다.
+- [ ] **release exe `--selftest RESULT=OK`** — ⚠️ 릴리스는 `windows_subsystem="windows"`라 그냥 실행하면 출력·exit code가 둘 다 빈손이다. `Start-Process -RedirectStandardOutput`으로 받아야 결과를 읽는다.
+- [ ] MSIX 실물 검증 — 매니페스트 Identity 4필드 + 페이로드에 `clowder.exe`·`conpty.dll`·`OpenConsole.exe`가 있는지(zip으로 열어 확인).
+- [ ] **THIRD-PARTY-NOTICES** — 새 크레이트/패키지가 늘었으면 갱신. `Cargo.lock` 변화가 clowder 버전 한 줄뿐이면 불변.
