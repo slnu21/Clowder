@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
+import { useT } from "../../lib/i18n";
 import { entryDragProps } from "./useEntryDrag";
 import { defaultRoot, listDir, listDrives, type Entry } from "../../lib/tauri";
 import { useSettings } from "../settings/store";
@@ -20,7 +21,8 @@ export default function FolderNav({
   onOpenFile: (path: string, kind: "md" | "html") => void;
   onMenu: (e: React.MouseEvent, entry: Entry) => void;
 }) {
-  const [cwd, setCwd] = useState<string | null>(null); // null = 내 컴퓨터 (roots)
+  const t = useT();
+  const [cwd, setCwd] = useState<string | null>(null); // null = the roots screen
   const [entries, setEntries] = useState<Entry[]>([]);
   const [drives, setDrives] = useState<Entry[]>([]);
   const favorites = useSettings((s) => s.settings.favorites);
@@ -73,29 +75,29 @@ export default function FolderNav({
   return (
     <>
       <div className="side-head">
-        <button className="side-home" title="내 컴퓨터" onClick={() => void navigate(null)}>
+        <button className="side-home" title={t("explorer.myComputer")} onClick={() => void navigate(null)}>
           <Icon name="folder" size={14} />
         </button>
-        <span className="path" title={cwd ?? "내 컴퓨터"}>
-          {cwd ?? "내 컴퓨터"}
+        <span className="path" title={cwd ?? t("explorer.myComputer")}>
+          {cwd ?? t("explorer.myComputer")}
         </span>
       </div>
 
       <div className="tree">
         {cwd === null ? (
           <>
-            {favEntries.length > 0 && <div className="tree-label">즐겨찾기</div>}
+            {favEntries.length > 0 && <div className="tree-label">{t("common.favorites")}</div>}
             {favEntries.map((e) => (
               <FolderRow key={"fav:" + e.path} entry={e} onActivate={activate} onMenu={onMenu} />
             ))}
-            <div className="tree-label">드라이브</div>
+            <div className="tree-label">{t("explorer.drives")}</div>
             {drives.map((e) => (
               <FolderRow key={e.path} entry={e} onActivate={activate} onMenu={onMenu} />
             ))}
           </>
         ) : (
           <>
-            <div className="row up" onClick={() => void navigate(parentOf(cwd))} title="상위 폴더">
+            <div className="row up" onClick={() => void navigate(parentOf(cwd))} title={t("explorer.parentFolder")}>
               <span className="twisty">
                 <Icon name="level-up" size={12} />
               </span>

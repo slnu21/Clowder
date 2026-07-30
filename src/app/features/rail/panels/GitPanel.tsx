@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import { gitStatus, type GitStatus } from "../../../lib/git";
+import { useT } from "../../../lib/i18n";
 import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useActiveTerminalCwd, useWorkspace } from "../../workspace/store";
 
 /**
- * Git status of the **active terminal pane's folder**. Today that's the pane's spawn cwd (`leaf.cwd`);
- * when the live-cwd milestone (OSC 7) lands and makes `leaf.cwd` track `cd`, this panel follows with no
- * change — it already reads `leaf.cwd`. Degrades honestly: no active terminal → "활성 터미널 없음", a
- * folder that isn't a repo (or git absent) → "저장소 아님".
+ * Git status of the **active terminal pane's folder** (`leaf.cwd`, which tracks `cd` via OSC 7, so the
+ * panel follows the pane with no work of its own). Degrades honestly: no active terminal, git absent,
+ * and "not a repository" are three different empty states, not one.
  */
 export default function GitPanel() {
+  const t = useT();
   const cwd = useActiveTerminalCwd();
   const openTerminalTab = useWorkspace((s) => s.openTerminalTab);
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -32,9 +33,9 @@ export default function GitPanel() {
   }, [refresh]);
   useFocusRefresh(refresh);
 
-  if (!cwd) return <div className="placeholder">활성 터미널 없음</div>;
-  if (status?.gitMissing) return <div className="placeholder">git 미설치</div>;
-  if (!status || !status.isRepo) return <div className="placeholder">저장소 아님</div>;
+  if (!cwd) return <div className="placeholder">{t("common.noActiveTerminal")}</div>;
+  if (status?.gitMissing) return <div className="placeholder">{t("git.missing")}</div>;
+  if (!status || !status.isRepo) return <div className="placeholder">{t("git.notRepo")}</div>;
 
   const dirty = status.staged + status.unstaged + status.untracked + status.conflicts;
   return (
@@ -52,27 +53,27 @@ export default function GitPanel() {
             </span>
           )}
         </div>
-        <button className="git-refresh" onClick={refresh} title="새로고침">
+        <button className="git-refresh" onClick={refresh} title={t("common.refresh")}>
           <Icon name="refresh" size={13} />
         </button>
       </div>
 
       <div className="git-body">
         {dirty === 0 ? (
-          <div className="git-clean">깨끗함</div>
+          <div className="git-clean">{t("git.clean")}</div>
         ) : (
           <div className="git-counts">
-            {status.staged > 0 && <GitCount kind="staged" label="스테이지" n={status.staged} />}
-            {status.unstaged > 0 && <GitCount kind="unstaged" label="변경" n={status.unstaged} />}
-            {status.untracked > 0 && <GitCount kind="untracked" label="추적 안 됨" n={status.untracked} />}
-            {status.conflicts > 0 && <GitCount kind="conflict" label="충돌" n={status.conflicts} />}
+            {status.staged > 0 && <GitCount kind="staged" label={t("git.staged")} n={status.staged} />}
+            {status.unstaged > 0 && <GitCount kind="unstaged" label={t("git.unstaged")} n={status.unstaged} />}
+            {status.untracked > 0 && <GitCount kind="untracked" label={t("git.untracked")} n={status.untracked} />}
+            {status.conflicts > 0 && <GitCount kind="conflict" label={t("git.conflicts")} n={status.conflicts} />}
           </div>
         )}
       </div>
 
       {status.root && (
         <button className="git-open" onClick={() => openTerminalTab(status.root!)}>
-          여기서 터미널 열기
+          {t("explorer.openTerminalHere")}
         </button>
       )}
     </div>

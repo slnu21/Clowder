@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import Icon from "../../components/Icon";
+import { useT, type MsgKey } from "../../lib/i18n";
 import { beaconInstall, beaconStatus, beaconUninstall } from "../../lib/beacon";
 import type { BeaconStatus, StatuslineMode } from "../../lib/beacon";
 import { useFocusRefresh } from "../../lib/useFocusRefresh";
@@ -13,12 +14,13 @@ import {
   type SessionView,
 } from "../../lib/sessions";
 
-const STATUS_LABEL: Record<string, string> = {
-  awaiting_permission: "승인 대기",
-  awaiting_input: "대기 중",
-  working: "동작 중",
-  idle: "유휴",
-  dead: "종료됨",
+/** Spool status → catalogue key. Resolved at render time so the rail re-labels on a language switch. */
+const STATUS_KEY: Record<string, MsgKey> = {
+  awaiting_permission: "sessions.statusAwaitingPermission",
+  awaiting_input: "sessions.statusAwaitingInput",
+  working: "sessions.statusWorking",
+  idle: "sessions.statusIdle",
+  dead: "sessions.statusDead",
 };
 
 /**
@@ -27,6 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
  * the pushed snapshot and ticks the elapsed clocks locally.
  */
 export default function Sessions({ variant = "full" }: { variant?: "full" | "mini" | "body" }) {
+  const t = useT();
   const [snap, setSnap] = useState<SessionsSnapshot | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -103,7 +106,7 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
   // prompts and prose belong to the full rail — there is no room to say anything honestly in 40px.
   if (variant === "mini") {
     return (
-      <aside className="pane sessions sessions-mini" title="세션 레일 (좁게)">
+      <aside className="pane sessions sessions-mini" title={t("sessions.railMini")}>
         {waiting > 0 && <span className="mini-waiting">{waiting}</span>}
         <div className="mini-list">
           {sessions.map((s) => (
@@ -123,44 +126,39 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
       <div className="session-list">
         {asking ? (
           <div className="track-prompt">
-            <div className="track-title">상태줄을 쓸까요?</div>
+            <div className="track-title">{t("sessions.statuslineTitle")}</div>
             <p className="track-desc">
-              사용량(컨텍스트·5시간·7일)은 Claude Code 상태줄로 들어옵니다. 지금 쓰는 상태줄이 없어서,
-              Clowder가 상태줄에 무엇을 그릴지 고를 수 있어요. 나중에 끄면 상태줄 설정은 원래대로
-              (없던 상태로) 돌아갑니다.
+              {t("sessions.statuslineBody")}
             </p>
             <button className="track-btn" onClick={() => install("none")} disabled={busy}>
-              사용량만 수집 (상태줄 비움)
+              {t("sessions.statuslineUsageOnly")}
             </button>
             <button className="track-btn track-btn-alt" onClick={() => install("clowder")} disabled={busy}>
-              Clowder 상태줄 쓰기 (폴더·모델·ctx·5h)
+              {t("sessions.statuslineClowder")}
             </button>
           </div>
         ) : off ? (
           <div className="track-prompt">
-            <div className="track-title">세션 추적이 꺼져 있어요</div>
+            <div className="track-title">{t("sessions.offTitle")}</div>
             <p className="track-desc">
-              설치하면 실행 중인 Claude Code 세션·상태와 사용량(컨텍스트·5시간·7일)이 여기 표시됩니다.
-              Claude Code 훅을 추가하고 상태줄(statusline)로 사용량을 읽습니다. 기존 상태줄과 설정은
-              백업·보존해, 끄면 원래대로 되돌립니다.
+              {t("sessions.offBody")}
             </p>
             <button className="track-btn" onClick={startInstall} disabled={busy}>
-              {busy ? "설치 중…" : "세션 추적 설치"}
+              {busy ? t("sessions.installing") : t("sessions.install")}
             </button>
           </div>
         ) : partial ? (
           <div className="track-prompt track-warn">
-            <div className="track-title">사용량 수집이 끊겨 있어요</div>
+            <div className="track-title">{t("sessions.brokenTitle")}</div>
             <p className="track-desc">
-              세션 훅은 설치돼 있지만 상태줄이 Clowder에 연결돼 있지 않습니다 — 세션 목록은 뜨고
-              사용량(컨텍스트·5시간·7일)만 비어 있는 상태예요. 다시 설치하면 상태줄만 연결합니다.
+              {t("sessions.brokenBody")}
             </p>
             <button className="track-btn" onClick={startInstall} disabled={busy}>
-              {busy ? "설치 중…" : "다시 설치"}
+              {busy ? t("sessions.installing") : t("sessions.reinstall")}
             </button>
           </div>
         ) : sessions.length === 0 ? (
-          <div className="placeholder">세션 없음</div>
+          <div className="placeholder">{t("sessions.none")}</div>
         ) : (
           sessions.map((s) => <SessionRow key={s.sessionId} s={s} now={now} />)
         )}
@@ -172,14 +170,14 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
           home is off virtualized AppData, so a false one is a real "the CLI can't find it" state. */}
       {status?.hooks && status.binDir && (
         <div className={"track-loc" + (status.binary ? "" : " track-loc-warn")}>
-          <span className="track-loc-label">{status.binary ? "추적 위치" : "추적 파일 없음"}</span>
+          <span className="track-loc-label">{status.binary ? t("sessions.trackLoc") : t("sessions.trackMissing")}</span>
           <span className="track-loc-path" title={status.binDir}>{status.binDir}</span>
           <button
             className="track-loc-open"
             onClick={() => void revealItemInDir(status.binDir!)}
-            title="폴더 열기"
+            title={t("sessions.openFolder")}
           >
-            열기
+            {t("common.open")}
           </button>
         </div>
       )}
@@ -189,9 +187,9 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
           className="track-off"
           onClick={uninstall}
           disabled={busy}
-          title="Clowder 훅·상태줄 래퍼만 제거 — 기존 statusline·다른 설정은 원복/보존"
+          title={t("sessions.uninstallTitle")}
         >
-          세션 추적 끄기
+          {t("sessions.uninstall")}
         </button>
       )}
     </>
@@ -202,7 +200,7 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
   return (
     <aside className="pane sessions">
       <div className="pane-title">
-        세션
+        {t("sessions.header")}
         {waiting > 0 && <span className="waiting-badge">{waiting}</span>}
       </div>
       {body}
@@ -211,6 +209,7 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
 }
 
 function SessionRow({ s, now }: { s: SessionView; now: number }) {
+  const t = useT();
   const focusLeaf = useWorkspace((w) => w.focusLeaf);
   // A correlated session (paneId set) still resolves to a live tile only if that pane is still open.
   const linkedLeaf = s.paneId != null ? leafIdForPty(s.paneId) : undefined;
@@ -219,20 +218,20 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
     <div
       className={"session " + s.status + (linkedLeaf ? " linked" : "")}
       onMouseDown={() => linkedLeaf && focusLeaf(linkedLeaf)}
-      title={linkedLeaf ? "이 세션의 페인으로 이동" : undefined}
+      title={linkedLeaf ? t("sessions.jumpToPane") : undefined}
     >
       <div className="session-head">
         <span className={"badge " + s.status} />
         <span className="session-project">{s.project}</span>
         {linkedLeaf && (
-          <span className="session-link" title="이 페인에서 실행 중">
+          <span className="session-link" title={t("sessions.runningHere")}>
             <Icon name="session-link" size={13} />
           </span>
         )}
         <span className="session-elapsed">{elapsed(s.statusSince, now)}</span>
       </div>
       <div className="session-meta">
-        <span className="session-status">{STATUS_LABEL[s.status] ?? s.status}</span>
+        <span className="session-status">{STATUS_KEY[s.status] ? t(STATUS_KEY[s.status]) : s.status}</span>
         {s.toolName && <span className="session-tool">· {s.toolName}</span>}
         {s.ctxPercent != null && (
           <span className="session-ctx" title={s.ctxTokens ?? undefined}>
@@ -257,11 +256,12 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
 
 /** One session as a vertical chip: status stripe + name written top-to-bottom. */
 function MiniSession({ s }: { s: SessionView }) {
+  const t = useT();
   const focusLeaf = useWorkspace((w) => w.focusLeaf);
   const linkedLeaf = s.paneId != null ? leafIdForPty(s.paneId) : undefined;
   const label = [
     s.project,
-    STATUS_LABEL[s.status] ?? s.status,
+    STATUS_KEY[s.status] ? t(STATUS_KEY[s.status]) : s.status,
     s.ctxPercent != null ? `ctx ${Math.round(s.ctxPercent)}%` : null,
     s.toolName,
   ]
@@ -283,12 +283,24 @@ function MiniSession({ s }: { s: SessionView }) {
 
 /** Budgets as vertical meters, filling from the bottom. */
 function MiniUsage({ usage, topCtx }: { usage?: SessionsSnapshot["usage"]; topCtx: number | null }) {
+  const t = useT();
   const meters: Array<{ key: string; label: string; pct: number; title: string }> = [];
-  if (topCtx != null) meters.push({ key: "ctx", label: "C", pct: topCtx, title: `컨텍스트 ${Math.round(topCtx)}% (상단 세션)` });
+  if (topCtx != null)
+    meters.push({ key: "ctx", label: "C", pct: topCtx, title: t("sessions.meterCtx", { pct: Math.round(topCtx) }) });
   if (usage?.fiveHourPct != null)
-    meters.push({ key: "5h", label: "5", pct: usage.fiveHourPct, title: `5시간 ${Math.round(usage.fiveHourPct)}%` });
+    meters.push({
+      key: "5h",
+      label: "5",
+      pct: usage.fiveHourPct,
+      title: t("sessions.meterFiveHour", { pct: Math.round(usage.fiveHourPct) }),
+    });
   if (usage?.sevenDayPct != null)
-    meters.push({ key: "7d", label: "7", pct: usage.sevenDayPct, title: `7일 ${Math.round(usage.sevenDayPct)}%` });
+    meters.push({
+      key: "7d",
+      label: "7",
+      pct: usage.sevenDayPct,
+      title: t("sessions.meterSevenDay", { pct: Math.round(usage.sevenDayPct) }),
+    });
   if (meters.length === 0) return null;
 
   return (
@@ -306,12 +318,13 @@ function MiniUsage({ usage, topCtx }: { usage?: SessionsSnapshot["usage"]; topCt
 }
 
 function UsageFooter({ usage }: { usage: SessionsSnapshot["usage"] }) {
+  const t = useT();
   const has = usage.fiveHourPct != null || usage.sevenDayPct != null;
   if (!has) return null;
   return (
     <div className="usage-footer">
-      {usage.fiveHourPct != null && <UsageBar label="5시간" pct={usage.fiveHourPct} />}
-      {usage.sevenDayPct != null && <UsageBar label="7일" pct={usage.sevenDayPct} />}
+      {usage.fiveHourPct != null && <UsageBar label={t("sessions.fiveHour")} pct={usage.fiveHourPct} />}
+      {usage.sevenDayPct != null && <UsageBar label={t("sessions.sevenDay")} pct={usage.sevenDayPct} />}
     </div>
   );
 }

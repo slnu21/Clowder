@@ -1,5 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import Icon from "../../components/Icon";
+import { useT } from "../../lib/i18n";
 import { useSettings } from "../settings/store";
 import { basename } from "./model";
 import { useWorkspace } from "./store";
@@ -10,6 +11,7 @@ import { useWorkspace } from "./store";
  * or jump straight to a favourite.
  */
 export default function Welcome() {
+  const t = useT();
   const openTerminalTab = useWorkspace((s) => s.openTerminalTab);
   const newTab = useWorkspace((s) => s.newTab);
   const favorites = useSettings((s) => s.settings.favorites);
@@ -25,22 +27,22 @@ export default function Welcome() {
         <span className="welcome-dot" />
         Clowder
       </div>
-      <p className="welcome-hint">폴더를 열어 터미널을 시작하거나, 즐겨찾기에서 선택하세요.</p>
+      <p className="welcome-hint">{t("welcome.hint")}</p>
 
       <div className="welcome-actions">
         <button type="button" onClick={pickFolder}>
           <Icon name="folder" size={15} />
-          폴더 열기…
+          {t("welcome.openFolder")}
         </button>
         <button type="button" onClick={newTab}>
           <Icon name="terminal" size={15} />
-          새 터미널
+          {t("welcome.newTerminal")}
         </button>
       </div>
 
       {favorites.length > 0 && (
         <div className="welcome-favs">
-          <div className="welcome-favs-label">즐겨찾기</div>
+          <div className="welcome-favs-label">{t("common.favorites")}</div>
           {favorites.map((f) => (
             <button key={f} type="button" className="welcome-fav" onClick={() => openTerminalTab(f)} title={f}>
               <Icon name="folder" size={14} className="folder" />

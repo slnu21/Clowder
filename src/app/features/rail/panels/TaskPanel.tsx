@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
+import { useT } from "../../../lib/i18n";
 import { listTasks, type Task } from "../../../lib/tasks";
 import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useActiveTerminalCwd, useWorkspace } from "../../workspace/store";
@@ -10,6 +11,7 @@ import { useActiveTerminalCwd, useWorkspace } from "../../workspace/store";
  * Bound to `leaf.cwd`, which now tracks `cd` (OSC 7), so the list follows the pane's current folder.
  */
 export default function TaskPanel() {
+  const t = useT();
   const cwd = useActiveTerminalCwd();
   const openCommandTab = useWorkspace((s) => s.openCommandTab);
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -30,22 +32,22 @@ export default function TaskPanel() {
   }, [refresh]);
   useFocusRefresh(refresh);
 
-  if (!cwd) return <div className="placeholder">활성 터미널 없음</div>;
-  if (!tasks) return <div className="placeholder">읽는 중…</div>;
-  if (tasks.length === 0) return <div className="placeholder">작업 없음</div>;
+  if (!cwd) return <div className="placeholder">{t("common.noActiveTerminal")}</div>;
+  if (!tasks) return <div className="placeholder">{t("common.loading")}</div>;
+  if (tasks.length === 0) return <div className="placeholder">{t("task.none")}</div>;
 
   return (
     <div className="task-list">
-      {tasks.map((t, i) => (
+      {tasks.map((task, i) => (
         <button
           className="task-row"
-          key={`${t.source}-${t.name}-${i}`}
-          onClick={() => openCommandTab(t.command, t.name, cwd)}
-          title={t.command}
+          key={`${task.source}-${task.name}-${i}`}
+          onClick={() => openCommandTab(task.command, task.name, cwd)}
+          title={task.command}
         >
           <Icon name="play" size={12} className="task-icon" />
-          <span className="task-name">{t.name}</span>
-          <span className="task-src">{t.source}</span>
+          <span className="task-name">{task.name}</span>
+          <span className="task-src">{task.source}</span>
         </button>
       ))}
     </div>

@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
+import { useT } from "../../../lib/i18n";
 import { getSnippets, setSnippets, type Snippet } from "../../../lib/snippets";
 import { writeToPane } from "../../terminal/terminalPool";
 import { findLeaf } from "../../workspace/model";
@@ -11,6 +12,7 @@ import { useWorkspace } from "../../workspace/store";
  * pane for it. Persisted to a JSON file via Rust. The frontend owns the list and re-sends it on change.
  */
 export default function SnippetsPanel() {
+  const t = useT();
   const [snips, setSnips] = useState<Snippet[]>([]);
   const [draftLabel, setDraftLabel] = useState("");
   const [draftCmd, setDraftCmd] = useState("");
@@ -53,18 +55,18 @@ export default function SnippetsPanel() {
     <div className="snip-panel">
       <div className="snip-rows">
         {snips.length === 0 ? (
-          <div className="placeholder">스니펫 없음</div>
+          <div className="placeholder">{t("snippets.none")}</div>
         ) : (
           snips.map((s) => (
             <div className="snip-row" key={s.id}>
-              <button className="snip-run" onClick={() => run(s.command)} title={`실행: ${s.command}`}>
+              <button className="snip-run" onClick={() => run(s.command)} title={t("snippets.runTitle", { cmd: s.command })}>
                 <Icon name="play" size={12} className="snip-icon" />
                 <span className="snip-text">
                   <span className="snip-label">{s.label || s.command}</span>
                   {s.label && <span className="snip-sub">{s.command}</span>}
                 </span>
               </button>
-              <button className="snip-del" onClick={() => del(s.id)} title="삭제">
+              <button className="snip-del" onClick={() => del(s.id)} title={t("common.delete")}>
                 <Icon name="close" size={12} />
               </button>
             </div>
@@ -76,7 +78,7 @@ export default function SnippetsPanel() {
           className="snip-input"
           value={draftLabel}
           onChange={(e) => setDraftLabel(e.target.value)}
-          placeholder="라벨 (선택)"
+          placeholder={t("snippets.labelPlaceholder")}
           spellCheck={false}
         />
         <div className="snip-add-row">
@@ -84,10 +86,10 @@ export default function SnippetsPanel() {
             className="snip-input"
             value={draftCmd}
             onChange={(e) => setDraftCmd(e.target.value)}
-            placeholder="명령…"
+            placeholder={t("snippets.commandPlaceholder")}
             spellCheck={false}
           />
-          <button className="snip-addbtn" type="submit" title="추가">
+          <button className="snip-addbtn" type="submit" title={t("common.add")}>
             <Icon name="plus" size={14} />
           </button>
         </div>

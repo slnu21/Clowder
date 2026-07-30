@@ -33,6 +33,10 @@ pub struct Settings {
     pub accent: String,
     /// Chrome scale, 0.9–1.5. Multiplies every CSS size token; the terminal has its own font size.
     pub ui_scale: f32,
+    /// UI language: `"auto"` | `"ko"` | `"en"`. `"auto"` resolves against the WebView locale, which
+    /// follows the OS UI language. Stored as a free string — the frontend catalogue owns the set and
+    /// falls back to `auto` behaviour for anything it doesn't know.
+    pub language: String,
     /// Is the left panel (explorer/workspace) shown?
     pub left_panel: bool,
     /// Right session rail: `"full"` | `"mini"` | `"hidden"`, or `None` for **never chosen**.
@@ -62,6 +66,7 @@ impl Default for Settings {
             terminal_theme: "dark".into(),
             accent: "amber".into(),
             ui_scale: 1.0,
+            language: "auto".into(),
             left_panel: true,
             right_rail: None,
             right_panel: "sessions".into(),

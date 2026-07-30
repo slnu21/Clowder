@@ -3,6 +3,7 @@ import "allotment/dist/style.css";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Icon from "../../components/Icon";
+import { useT } from "../../lib/i18n";
 import TerminalView from "../terminal/TerminalView";
 import {
   copyOrPaste,
@@ -91,6 +92,7 @@ export default function TileTree({ node }: { node: Node }) {
 }
 
 function PaneFrame({ leaf }: { leaf: Leaf }) {
+  const t = useT();
   const active = useWorkspace((s) => s.activePaneId === leaf.id);
   const setActivePane = useWorkspace((s) => s.setActivePane);
   const splitPane = useWorkspace((s) => s.splitPane);
@@ -171,13 +173,13 @@ function PaneFrame({ leaf }: { leaf: Leaf }) {
         <span className="tile-title">{leaf.title}</span>
         <span className="tile-actions">
           <TintPicker paneId={leaf.id} tint={leaf.tint} />
-          <button draggable={false} title="좌우 분할" onClick={() => splitPane(leaf.id, "row")}>
+          <button draggable={false} title={t("workspace.splitRow")} onClick={() => splitPane(leaf.id, "row")}>
             <Icon name="split-h" size={13} />
           </button>
-          <button draggable={false} title="상하 분할" onClick={() => splitPane(leaf.id, "column")}>
+          <button draggable={false} title={t("workspace.splitColumn")} onClick={() => splitPane(leaf.id, "column")}>
             <Icon name="split-v" size={13} />
           </button>
-          <button draggable={false} title="닫기" onClick={() => closePane(leaf.id)}>
+          <button draggable={false} title={t("workspace.closePane")} onClick={() => closePane(leaf.id)}>
             <Icon name="close" size={13} />
           </button>
         </span>
@@ -247,6 +249,7 @@ function TerminalMenu({
   y: number;
   onClose: () => void;
 }) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Capture phase, both listeners: xterm handles key/mouse events on its own element and stops their
@@ -273,10 +276,10 @@ function TerminalMenu({
 
   return createPortal(
     <div className="ctx term-ctx" style={{ left: x, top: y }} ref={ref}>
-      <button onClick={() => { void copyView(leafId); onClose(); }}>화면 복사</button>
-      <button onClick={() => { void pasteInto(leafId); onClose(); }}>붙여넣기</button>
-      <button onClick={() => { selectAllPane(leafId); onClose(); }}>모두 선택</button>
-      <div className="ctx-hint">Shift+드래그로 부분 선택</div>
+      <button onClick={() => { void copyView(leafId); onClose(); }}>{t("workspace.copyView")}</button>
+      <button onClick={() => { void pasteInto(leafId); onClose(); }}>{t("workspace.paste")}</button>
+      <button onClick={() => { selectAllPane(leafId); onClose(); }}>{t("workspace.selectAll")}</button>
+      <div className="ctx-hint">{t("workspace.selectionHint")}</div>
     </div>,
     document.body,
   );

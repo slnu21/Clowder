@@ -33,6 +33,7 @@ Clowder는 **여러 Claude Code 세션을 병렬로** 돌리며 — 터미널에
 - **터미널 클립보드** — `Ctrl+V` 붙여넣기, 선택이 있을 때만 복사하는 `Ctrl+C`, Shift+드래그 부분 선택. **전체화면 TUI에서도 복사가 된다** — 프로그램의 클립보드 요청(OSC 52)을 처리하므로 Claude Code·tmux·vim의 복사가 그대로 클립보드로 온다.
 - **문서 뷰어** — 로컬 Markdown / HTML(수식·다이어그램 포함) 렌더링. 탭을 다녀와도 읽던 자리를 유지한다.
 - **디자인** — 딥다크 / 라이트 테마 + 액센트, 커스텀 제목표시줄. 터미널 색 테마는 앱 테마와 별개 축이다.
+- **언어** — 한국어 · 영어 UI. 기본은 시스템 언어를 따르고, 설정에서 바로 바꿀 수 있다(재시작 없음).
 
 ## 시작하기
 
@@ -87,6 +88,7 @@ Clowder runs **multiple Claude Code sessions in parallel** — do git and builds
 - **Terminal clipboard** — `Ctrl+V` pastes, `Ctrl+C` copies only when there's a selection, Shift+drag makes a partial selection. **Copy works in a fullscreen TUI too** — the terminal handles a program's clipboard request (OSC 52), so copying in Claude Code, tmux, or vim lands on your clipboard.
 - **Document viewer** — renders local Markdown / HTML with math and diagrams, and holds your reading position across tab switches.
 - **Design** — deep-dark / light themes with an accent, and a custom title bar. The terminal palette is its own axis, separate from the app theme.
+- **Language** — Korean and English UI. It follows your system language by default and switches instantly in settings, with no restart.
 
 ## Getting started
 

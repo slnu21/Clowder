@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "../../lib/i18n";
 import { TINT_COUNT } from "./model";
 import { useWorkspace } from "./store";
 
@@ -11,6 +12,7 @@ import { useWorkspace } from "./store";
  * place would be cut off by its own tile.
  */
 export default function TintPicker({ paneId, tint }: { paneId: string; tint?: number }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const dotRef = useRef<HTMLButtonElement>(null);
@@ -55,7 +57,7 @@ export default function TintPicker({ paneId, tint }: { paneId: string; tint?: nu
       <button
         ref={dotRef}
         type="button"
-        title="페인 색"
+        title={t("workspace.paneColor")}
         className="tile-tint-btn"
         onClick={(e) => {
           e.stopPropagation();
@@ -71,7 +73,7 @@ export default function TintPicker({ paneId, tint }: { paneId: string; tint?: nu
               <button
                 key={v}
                 type="button"
-                aria-label={`색 ${v}`}
+                aria-label={t("workspace.colorSwatch", { n: v })}
                 aria-pressed={tint === v}
                 className={"tint-sw" + (tint === v ? " on" : "")}
                 style={{ ["--sw"]: `var(--tint-${v})` } as React.CSSProperties}
@@ -79,7 +81,7 @@ export default function TintPicker({ paneId, tint }: { paneId: string; tint?: nu
               />
             ))}
             <button type="button" className="tint-clear" onClick={() => pick(null)}>
-              기본
+              {t("workspace.colorDefault")}
             </button>
           </div>,
           document.body,

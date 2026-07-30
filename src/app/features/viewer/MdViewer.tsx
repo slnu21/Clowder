@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useT } from "../../lib/i18n";
 import { createMarkdown } from "../../lib/markdown";
 import { renderMermaid } from "../../lib/mermaid";
 import { dirOf, inlineImages } from "../../lib/previewImages";
@@ -25,6 +26,7 @@ import { trackViewerScroll } from "./scrollMemory";
  */
 export default function MdViewer({ leafId, path }: { leafId: string; path: string }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const t = useT();
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const theme = useSettings((s) => s.settings.theme);
@@ -78,7 +80,7 @@ export default function MdViewer({ leafId, path }: { leafId: string; path: strin
     trackViewerScroll(leafId, path, doc);
   };
 
-  if (error) return <div className="viewer-error">열기 실패: {error}</div>;
+  if (error) return <div className="viewer-error">{t("viewer.openFailed", { error })}</div>;
   return (
     <div className="viewer">
       <iframe ref={iframeRef} className="viewer-frame" sandbox="allow-same-origin" title={path} onLoad={onLoad} />

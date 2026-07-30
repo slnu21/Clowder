@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import { dockerContainers, dockerStart, dockerStop, type DockerContainer } from "../../../lib/docker";
+import { useT } from "../../../lib/i18n";
 import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useWorkspace } from "../../workspace/store";
 
 /**
  * Docker containers: start/stop, and — for a running one — shell in or tail logs, each in its own pane
- * (the shared rail verb, via `openCommandTab`). Fail-soft: no daemon → "컨테이너 없음". Registered only
- * when docker is usable, so a machine without docker never sees the panel.
+ * (the shared rail verb, via `openCommandTab`). Fail-soft: no daemon → an empty-state line. Registered
+ * only when docker is usable, so a machine without docker never sees the panel.
  */
 export default function DockerPanel() {
+  const t = useT();
   const [rows, setRows] = useState<DockerContainer[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const openCommandTab = useWorkspace((s) => s.openCommandTab);
@@ -41,15 +43,15 @@ export default function DockerPanel() {
   return (
     <div className="dk-panel">
       <div className="dk-head">
-        <span>컨테이너</span>
-        <button className="dk-refresh" onClick={refresh} title="새로고침">
+        <span>{t("docker.containers")}</span>
+        <button className="dk-refresh" onClick={refresh} title={t("common.refresh")}>
           <Icon name="refresh" size={13} />
         </button>
       </div>
       {rows === null ? (
-        <div className="placeholder">읽는 중…</div>
+        <div className="placeholder">{t("common.loading")}</div>
       ) : rows.length === 0 ? (
-        <div className="placeholder">컨테이너 없음</div>
+        <div className="placeholder">{t("docker.none")}</div>
       ) : (
         <div className="dk-rows">
           {rows.map((c) => (
@@ -64,9 +66,9 @@ export default function DockerPanel() {
                   className="dk-btn"
                   onClick={() => toggle(c)}
                   disabled={busy === c.id}
-                  title={c.running ? "정지" : "시작"}
+                  title={c.running ? t("docker.stop") : t("docker.start")}
                 >
-                  {busy === c.id ? "…" : c.running ? "정지" : "시작"}
+                  {busy === c.id ? "…" : c.running ? t("docker.stop") : t("docker.start")}
                 </button>
                 {c.running && (
                   <>

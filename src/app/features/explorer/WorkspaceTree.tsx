@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
+import { useT } from "../../lib/i18n";
 import { entryDragProps } from "./useEntryDrag";
 import { listDir, type Entry } from "../../lib/tauri";
 import { basename, viewerKindFor } from "../workspace/model";
@@ -18,6 +19,7 @@ export default function WorkspaceTree({
   onMenu: (e: React.MouseEvent, entry: Entry) => void;
 }) {
   const cwd = useActiveCwd();
+  const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [children, setChildren] = useState<Map<string, Entry[]>>(new Map());
 
@@ -60,7 +62,7 @@ export default function WorkspaceTree({
   }
 
   if (!cwd) {
-    return <div className="placeholder">활성 터미널 없음</div>;
+    return <div className="placeholder">{t("common.noActiveTerminal")}</div>;
   }
 
   const root: Entry = { name: basename(cwd), path: cwd, isDir: true, hidden: false };
