@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import { gitStatus, type GitStatus } from "../../../lib/git";
+import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useActiveTerminalCwd, useWorkspace } from "../../workspace/store";
 
 /**
@@ -24,11 +25,12 @@ export default function GitPanel() {
       .catch(() => setStatus(null));
   }, [cwd]);
 
+  // Two effects, not one: the fetch has to re-run when the pane `cd`s (`refresh` closes over `cwd`),
+  // but the focus listener must not be torn down and rebuilt every time it does.
   useEffect(() => {
     refresh();
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
+  useFocusRefresh(refresh);
 
   if (!cwd) return <div className="placeholder">활성 터미널 없음</div>;
   if (status?.gitMissing) return <div className="placeholder">git 미설치</div>;

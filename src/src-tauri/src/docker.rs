@@ -18,13 +18,13 @@ pub struct DockerContainer {
 
 /// Is docker usable (installed + daemon responding)? Distinguishes "no docker" from "zero containers",
 /// so the panel can show an empty list rather than vanishing.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn docker_ok() -> bool {
     run_docker(&["ps", "-q"]).is_some()
 }
 
 /// All containers (running and stopped). Empty on any failure.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn docker_containers() -> Vec<DockerContainer> {
     match run_docker(&["ps", "-a", "--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}"]) {
         Some(out) => parse_containers(&out),
@@ -32,12 +32,12 @@ pub fn docker_containers() -> Vec<DockerContainer> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn docker_start(id: String) -> Result<(), String> {
     run_docker_checked(&["start", &id])
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn docker_stop(id: String) -> Result<(), String> {
     run_docker_checked(&["stop", &id])
 }

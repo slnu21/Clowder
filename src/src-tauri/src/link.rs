@@ -108,7 +108,7 @@ pub fn resolve(base: Option<&str>, raw: &str) -> Option<(PathBuf, Option<u32>)> 
 }
 
 /// Resolve, then confirm it exists. `None` means "don't make this a link".
-#[tauri::command]
+#[tauri::command(async)]
 pub fn resolve_link_target(base: Option<String>, raw: String) -> Option<LinkTarget> {
     let (path, line) = resolve(base.as_deref(), &raw)?;
     let meta = std::fs::metadata(&path).ok()?;

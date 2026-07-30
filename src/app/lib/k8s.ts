@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** Kubeconfig contexts + the current one. Mirrors Rust `k8s::KubeContexts`. */
 export type KubeContexts = { contexts: string[]; current: string | null };

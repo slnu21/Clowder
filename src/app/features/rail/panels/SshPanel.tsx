@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import { sshHosts, type SshHost } from "../../../lib/ssh";
+import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useWorkspace } from "../../workspace/store";
 
 /**
@@ -21,9 +22,8 @@ export default function SshPanel() {
 
   useEffect(() => {
     refresh();
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
+  useFocusRefresh(refresh);
 
   return (
     <div className="ssh-list">

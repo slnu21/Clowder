@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** Git status of a folder. Mirrors Rust `git::GitStatus` (camelCase). */
 export type GitStatus = {

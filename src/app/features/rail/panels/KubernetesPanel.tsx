@@ -10,6 +10,7 @@ import {
   type KubeNamespaces,
   type KubePod,
 } from "../../../lib/k8s";
+import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useWorkspace } from "../../workspace/store";
 
 /**
@@ -33,9 +34,8 @@ export default function KubernetesPanel() {
 
   useEffect(() => {
     refresh();
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
+  useFocusRefresh(refresh);
 
   const loadCluster = async () => {
     setLoading(true);

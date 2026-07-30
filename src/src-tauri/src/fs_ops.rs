@@ -14,14 +14,14 @@ use std::fs;
 use std::path::Path;
 
 /// Read a file as UTF-8 text. Used by the md/html viewers; the frontend normalizes newlines.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
 /// Read a file's bytes as base64 — for inlining a document's relative images as data URIs.
 /// (The asset protocol is blocked by CSP for fetch, so images come through IPC like md-reader's.)
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_file_base64(path: String) -> Result<String, String> {
     let bytes = fs::read(&path).map_err(|e| e.to_string())?;
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
@@ -39,7 +39,7 @@ pub struct Entry {
 }
 
 /// Roots for the tree. Drives only — there is no workspace, by design.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_drives() -> Vec<Entry> {
     let mut out = Vec::new();
     for letter in b'A'..=b'Z' {
@@ -56,7 +56,7 @@ pub fn list_drives() -> Vec<Entry> {
 ///
 /// Unreadable children are skipped rather than failing the whole listing: one
 /// permission-denied folder shouldn't blank the tree.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_dir(path: String) -> Result<Vec<Entry>, String> {
     let dir = Path::new(&path);
     if !dir.is_dir() {
@@ -103,7 +103,7 @@ fn is_hidden_attr(_e: &fs::DirEntry) -> bool {
 
 /// Where the explorer opens: the configured start path if set, else the Workspace folder, else the
 /// user profile.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn default_root() -> Option<String> {
     if let Some(configured) = crate::settings::start_root() {
         return Some(configured);

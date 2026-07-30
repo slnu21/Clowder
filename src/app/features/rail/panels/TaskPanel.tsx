@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import { listTasks, type Task } from "../../../lib/tasks";
+import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useActiveTerminalCwd, useWorkspace } from "../../workspace/store";
 
 /**
@@ -23,11 +24,11 @@ export default function TaskPanel() {
       .catch(() => setTasks([]));
   }, [cwd]);
 
+  // Two effects: `refresh` closes over `cwd` and must re-run on `cd`, but the listener shouldn't churn.
   useEffect(() => {
     refresh();
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
+  useFocusRefresh(refresh);
 
   if (!cwd) return <div className="placeholder">활성 터미널 없음</div>;
   if (!tasks) return <div className="placeholder">읽는 중…</div>;

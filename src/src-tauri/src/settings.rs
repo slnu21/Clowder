@@ -141,18 +141,18 @@ pub fn start_root() -> Option<String> {
     (!p.is_empty() && Path::new(&p).is_dir()).then_some(p)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_settings() -> Settings {
     load()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_settings(settings: Settings) -> Result<(), String> {
     save(&settings)
 }
 
 /// Settings-aware shell resolution for the frontend (replaces the old fixed `default_shell`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn resolve_shell_cmd() -> String {
     resolve_shell()
 }

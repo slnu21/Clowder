@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import { killProcess, listPorts, type PortRow } from "../../../lib/ports";
+import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 
 /**
  * Listening TCP ports with their owning process, and a kill button per row. On-demand (fetch on mount,
@@ -22,9 +23,8 @@ export default function PortsPanel() {
 
   useEffect(() => {
     refresh();
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
+  useFocusRefresh(refresh);
 
   const kill = async (pid: number) => {
     setBusy(pid);

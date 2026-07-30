@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /**
  * Clowder's session-tracking hooks. `beacon_install` adds `clowder.exe --beacon` hook groups to

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** Mirrors Rust `settings::Settings` (camelCase). */
 export type Settings = {

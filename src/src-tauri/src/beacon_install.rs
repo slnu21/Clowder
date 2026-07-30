@@ -545,7 +545,7 @@ fn newest_spool_write(sub: &str) -> Option<String> {
     Some(crate::beacon::unix_to_iso(secs))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn beacon_status() -> BeaconStatus {
     let root = settings_path().map(|p| load(&p)).unwrap_or_else(|| json!({}));
     let cmd = root.get("statusLine").and_then(|v| v.get("command")).and_then(|c| c.as_str());
@@ -569,7 +569,7 @@ pub fn beacon_status() -> BeaconStatus {
 
 /// `mode` decides what the status line shows for a user who had none: `"none"` (collect silently) or
 /// `"clowder"` (draw our own line). Ignored when we're wrapping an original.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn beacon_install(mode: Option<String>) -> Result<(), String> {
     let path = settings_path().ok_or("USERPROFILE unavailable")?;
     // Prefer the stable staged binary so hooks survive the app moving; fall back to the running exe.
@@ -587,7 +587,7 @@ pub fn beacon_install(mode: Option<String>) -> Result<(), String> {
     save(&path, &root)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn beacon_uninstall() -> Result<(), String> {
     let path = settings_path().ok_or("USERPROFILE unavailable")?;
     if !path.exists() {

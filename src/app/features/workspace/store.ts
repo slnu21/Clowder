@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useFocusRefresh } from "../../lib/useFocusRefresh";
 import { useSettings } from "../settings/store";
 import { focusPane, release } from "../terminal/terminalPool";
 import { forgetViewerScroll } from "../viewer/scrollMemory";
@@ -298,6 +299,31 @@ export function useActiveTerminalCwd(): string | undefined {
     const leaf = findLeaf(tab.root, s.activePaneId);
     return leaf?.content === "terminal" ? leaf.cwd : undefined;
   });
+}
+
+/**
+ * Hand the keyboard back to the active terminal when the window regains focus.
+ *
+ * Nothing did this before. WebView2 restores DOM focus to whatever element held it, and every rail row
+ * is a `<button>` — running a snippet, killing a port, connecting to a host all leave focus sitting on
+ * the button — so the first keys after an alt-tab went nowhere and it read as "typing is dead for a
+ * moment". Terminal panes only: pulling focus out of a viewer would break its scrolling.
+ *
+ * Both guards are off deliberately. `useFocusRefresh` exists to suppress *expensive* work on a glance
+ * elsewhere; this is one `.focus()` call, and it has to happen on every return, including the
+ * one-second ones.
+ */
+export function useRefocusActiveTerminal(): void {
+  useFocusRefresh(
+    () => {
+      const s = useWorkspace.getState();
+      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      if (!tab || !s.activePaneId) return;
+      const leaf = findLeaf(tab.root, s.activePaneId);
+      if (leaf?.content === "terminal") focusPane(leaf.id);
+    },
+    { minBackgroundMs: 0, throttleMs: 0 },
+  );
 }
 
 // Dev safety net for item 1 ("closing one split closes another"). A duplicate pane id is the shared root

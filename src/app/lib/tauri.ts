@@ -1,8 +1,10 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /**
- * Single window onto the Rust side. Every command goes through a typed wrapper here rather than
- * `invoke("...")` scattered across components — md-reader's `lib/tauri.ts` pattern.
+ * The PTY and filesystem commands. Every command goes through a typed wrapper rather than
+ * `invoke("...")` scattered across components — md-reader's `lib/tauri.ts` pattern — and every wrapper
+ * in the app, here and in the per-domain modules, calls the instrumented `invoke` from `./invoke`.
  */
 
 export type PtyChunk = { data: string };

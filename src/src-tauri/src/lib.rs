@@ -50,6 +50,21 @@ pub fn run() {
         // than no copy button at all.
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(pty::PtyState::default())
+        // **Which thread a command runs on is a correctness decision here, not a tuning knob.**
+        //
+        // A bare `#[tauri::command]` is `ExecutionContext::Blocking` — tauri-macros labels it `"sync"`
+        // and runs the body inline on the IPC handler thread, which on Windows is the WebView2 message
+        // pump (the main thread). Adding `(async)` moves it to `"sync_threadpool"`. Everything below
+        // that touches the filesystem or shells out (`git`, `docker`, `kubectl`) is therefore
+        // `(async)`: a `docker ps` against a sleeping daemon used to block paint, input dispatch and
+        // *every other command* for seconds. That was the "come back to the window and typing is dead
+        // for a few seconds" bug — `pty_write` was queued behind a probe nobody asked for.
+        //
+        // The `pty_*` commands stay sync **deliberately**. Keystrokes must reach the shell in the order
+        // they were typed, and IPC messages are drained in order on one thread; scattering them across
+        // threadpool tasks would let two writes race. Sync on a main thread that is no longer blocked
+        // is both ordered and immediate. `quote_path_cmd` (pure string work) and `sessions_snapshot`
+        // (a mutex clone) are sync because they are already microseconds.
         .invoke_handler(tauri::generate_handler![
             default_shell,
             pty::pty_spawn,

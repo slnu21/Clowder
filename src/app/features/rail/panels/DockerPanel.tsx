@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
 import { dockerContainers, dockerStart, dockerStop, type DockerContainer } from "../../../lib/docker";
+import { useFocusRefresh } from "../../../lib/useFocusRefresh";
 import { useWorkspace } from "../../workspace/store";
 
 /**
@@ -21,9 +22,8 @@ export default function DockerPanel() {
 
   useEffect(() => {
     refresh();
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
   }, [refresh]);
+  useFocusRefresh(refresh);
 
   const toggle = async (c: DockerContainer) => {
     setBusy(c.id);

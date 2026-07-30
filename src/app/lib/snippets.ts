@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** A saved command snippet. Mirrors Rust `snippets::Snippet`. `label` is optional (empty → the
  *  command is shown as its own label). */
