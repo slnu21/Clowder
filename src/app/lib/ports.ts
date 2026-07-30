@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** One listening TCP port and the process that owns it. Mirrors Rust `ports::PortRow`. `system` marks
  *  an OS/service-owned port (svchost, System, …), hidden by default in the panel. */

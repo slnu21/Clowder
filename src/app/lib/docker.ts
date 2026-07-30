@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** One container row. Mirrors Rust `docker::DockerContainer`. */
 export type DockerContainer = {

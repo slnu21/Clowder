@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** One `Host` entry from `~/.ssh/config`. Mirrors Rust `ssh::SshHost` (camelCase). */
 export type SshHost = {

@@ -3,6 +3,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import Icon from "../../components/Icon";
 import { beaconInstall, beaconStatus, beaconUninstall } from "../../lib/beacon";
 import type { BeaconStatus, StatuslineMode } from "../../lib/beacon";
+import { useFocusRefresh } from "../../lib/useFocusRefresh";
 import { leafIdForPty } from "../terminal/terminalPool";
 import { useWorkspace } from "../workspace/store";
 import {
@@ -56,12 +57,13 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
   const [asking, setAsking] = useState(false);
   const refresh = () => beaconStatus().then(setStatus).catch(() => {});
   // Refetch on focus, not just on mount: settings.json is edited outside this app all the time (by the
-  // user, by an uninstall, by another tool) and a stale "installed" is the thing we're fixing.
+  // user, by an uninstall, by another tool) and a stale "installed" is the thing we're fixing. Throttled
+  // — a one-second alt-tab can't have changed it, and eight panels doing this at once is what froze
+  // typing on window return.
   useEffect(() => {
     refresh();
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
   }, []);
+  useFocusRefresh(refresh);
 
   const install = async (mode?: StatuslineMode) => {
     setBusy(true);

@@ -21,7 +21,7 @@ pub struct SshHost {
 }
 
 /// Parsed `Host` entries from `~/.ssh/config`. Empty if the file is absent/unreadable (fail-soft).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn ssh_hosts() -> Vec<SshHost> {
     match config_path().and_then(|p| std::fs::read_to_string(p).ok()) {
         Some(text) => parse_ssh_config(&text),

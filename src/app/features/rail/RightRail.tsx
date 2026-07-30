@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusRefresh } from "../../lib/useFocusRefresh";
 import { useRailMode } from "../chrome/panels";
 import { useSettings } from "../settings/store";
 import Sessions from "../sessions/Sessions";
@@ -48,30 +49,38 @@ export default function RightRail() {
 
 /**
  * The panels worth showing right now. A panel without `available` is always in; one with `available`
- * is included only once its probe resolves true. Probed on mount and on window focus (a config/tool can
- * appear while the app is backgrounded), mirroring how the tracking probe works elsewhere. In M1 no
- * panel has `available`, so this resolves to the full list immediately.
+ * is included only once its probe resolves true.
+ *
+ * **Probed on mount, then at most every five minutes.** This runs for *every* registered panel, not
+ * just the visible one, so it is the one place in the app that pays for panels the user isn't looking
+ * at — `docker_ok` and `kubectl_contexts` are external processes, and on a machine with both installed
+ * that was four of them on **every** window focus while the active panel was Sessions, which needs
+ * none of it. What it asks ("is kubectl installed") does not change between alt-tabs; five minutes
+ * still catches a tool that appears mid-session, which is what the original focus probe was for.
  */
 function useVisiblePanels(): RightPanelDef[] {
   const [avail, setAvail] = useState<Record<string, boolean>>({});
-  useEffect(() => {
-    let cancelled = false;
-    const run = () => {
-      for (const p of RIGHT_PANELS) {
-        if (!p.available) continue;
-        Promise.resolve(p.available())
-          .then((ok) => {
-            if (!cancelled) setAvail((a) => (a[p.id] === ok ? a : { ...a, [p.id]: ok }));
-          })
-          .catch(() => {});
-      }
-    };
-    run();
-    window.addEventListener("focus", run);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", run);
-    };
+  const cancelled = useRef(false);
+
+  const probe = useCallback(() => {
+    for (const p of RIGHT_PANELS) {
+      if (!p.available) continue;
+      Promise.resolve(p.available())
+        .then((ok) => {
+          if (!cancelled.current) setAvail((a) => (a[p.id] === ok ? a : { ...a, [p.id]: ok }));
+        })
+        .catch(() => {});
+    }
   }, []);
+
+  useEffect(() => {
+    cancelled.current = false;
+    probe();
+    return () => {
+      cancelled.current = true;
+    };
+  }, [probe]);
+  useFocusRefresh(probe, { throttleMs: 300_000 });
+
   return RIGHT_PANELS.filter((p) => !p.available || avail[p.id]);
 }

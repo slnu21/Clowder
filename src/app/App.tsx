@@ -5,7 +5,7 @@ import Explorer from "./features/explorer/Explorer";
 import RightRail from "./features/rail/RightRail";
 import Workspace from "./features/workspace/Workspace";
 import { useSettings } from "./features/settings/store";
-import { useWorkspace } from "./features/workspace/store";
+import { useRefocusActiveTerminal, useWorkspace } from "./features/workspace/store";
 import type { RailMode } from "./lib/settings";
 
 /**
@@ -19,6 +19,7 @@ export default function App() {
   const openViewerTab = useWorkspace((s) => s.openViewerTab);
   const leftPanel = useSettings((s) => s.settings.leftPanel);
   const rail = useRailMode();
+  useRefocusActiveTerminal();
 
   return (
     <div className="app-root">

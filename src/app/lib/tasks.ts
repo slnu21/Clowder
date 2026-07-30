@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** One runnable task from a folder's manifest. Mirrors Rust `tasks::Task`. */
 export type Task = { name: string; command: string; source: string };

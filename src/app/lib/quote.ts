@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** Which shell a pane runs — decides how an embedded single quote is escaped. */
 export type ShellKind = "bash" | "power";

@@ -15,7 +15,7 @@ pub struct KubeContexts {
 }
 
 /// The kubeconfig's contexts and which one is current. Empty if kubectl/config is absent.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn kubectl_contexts() -> KubeContexts {
     let contexts = run_kubectl(&["config", "get-contexts", "-o", "name"])
         .map(|o| o.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
@@ -27,7 +27,7 @@ pub fn kubectl_contexts() -> KubeContexts {
 }
 
 /// Switch the current context. Returns kubectl's stderr on failure (shown inline).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn kubectl_use_context(name: String) -> Result<(), String> {
     run_kubectl_checked(&["config", "use-context", &name])
 }
@@ -42,7 +42,7 @@ pub struct KubePod {
 
 /// Pods in the current context/namespace. Bounded (`--request-timeout`) and fail-soft (empty on any
 /// failure, including an unreachable cluster).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn kubectl_pods() -> Vec<KubePod> {
     match run_kubectl(&["get", "pods", "--no-headers", "--request-timeout=5s"]) {
         Some(out) => parse_pods(&out),
@@ -77,7 +77,7 @@ pub struct KubeNamespaces {
 }
 
 /// Cluster namespaces + the current context's namespace. Bounded (cluster query) + fail-soft.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn kubectl_namespaces() -> KubeNamespaces {
     let namespaces = run_kubectl(&["get", "namespaces", "-o", "name", "--request-timeout=5s"])
         .map(|o| parse_ns_names(&o))
@@ -89,7 +89,7 @@ pub fn kubectl_namespaces() -> KubeNamespaces {
 }
 
 /// Set the current context's namespace. Returns kubectl's stderr on failure.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn kubectl_use_namespace(name: String) -> Result<(), String> {
     run_kubectl_checked(&["config", "set-context", "--current", &format!("--namespace={name}")])
 }

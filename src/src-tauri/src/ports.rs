@@ -35,7 +35,7 @@ pub struct PortRow {
 }
 
 /// Listening TCP ports with their owning process, sorted by port. Fail-soft: empty on any failure.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_ports() -> Vec<PortRow> {
     let names = proc_name_map();
     let mut rows = collect_listeners();
@@ -51,7 +51,7 @@ pub fn list_ports() -> Vec<PortRow> {
 
 /// Terminate a process by pid. Returns a message on failure so the UI can show it inline (there is no
 /// toast system — failures are rendered on the row).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn kill_process(pid: u32) -> Result<(), String> {
     if pid == 0 {
         return Err("잘못된 PID".into());

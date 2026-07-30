@@ -22,7 +22,7 @@ fn file() -> Option<PathBuf> {
 }
 
 /// The saved snippets. Empty on a missing or corrupt file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_snippets() -> Vec<Snippet> {
     file()
         .and_then(|p| std::fs::read_to_string(p).ok())
@@ -31,7 +31,7 @@ pub fn get_snippets() -> Vec<Snippet> {
 }
 
 /// Persist the whole list. Best-effort — reports an error string but the caller keeps its in-memory copy.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_snippets(snippets: Vec<Snippet>) -> Result<(), String> {
     let path = file().ok_or("APPDATA unavailable")?;
     if let Some(d) = path.parent() {

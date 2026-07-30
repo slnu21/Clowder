@@ -216,6 +216,12 @@ fn flush(channel: &Channel<PtyChunk>, pending: &mut Vec<u8>) -> Result<(), tauri
     channel.send(PtyChunk { data })
 }
 
+/// Sync **on purpose** — do not add `(async)` here.
+///
+/// This is the keystroke path (`term.onData` → one invoke per chunk). IPC messages are drained in
+/// order on a single thread, so a sync command preserves typing order for free; moving it to the
+/// threadpool would let two writes race and reorder characters. The reason it is safe to leave on the
+/// main thread is that every slow command has been moved *off* it — see the note in `lib.rs`.
 #[tauri::command]
 pub fn pty_write(state: tauri::State<'_, PtyState>, id: u64, data: String) -> Result<(), String> {
     let mut panes = state.panes.lock().unwrap();

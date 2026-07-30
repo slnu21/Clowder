@@ -19,7 +19,7 @@ pub struct Task {
 }
 
 /// Tasks found in `cwd`'s manifests, in file order (npm, then make, then just).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_tasks(cwd: String) -> Vec<Task> {
     let dir = Path::new(&cwd);
     let mut tasks = Vec::new();

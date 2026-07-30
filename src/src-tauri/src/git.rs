@@ -26,7 +26,7 @@ pub struct GitStatus {
 }
 
 /// Git status of `cwd`. `is_repo: false` when `cwd` isn't a work tree (or git is absent). Fail-soft.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_status(cwd: String) -> GitStatus {
     let root = match try_git(&cwd, &["rev-parse", "--show-toplevel"]) {
         GitRun::NotFound => return GitStatus { git_missing: true, ..Default::default() },
