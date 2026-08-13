@@ -4,7 +4,8 @@ import { useT } from "../../lib/i18n";
 import { entryDragProps } from "./useEntryDrag";
 import { listDir, type Entry } from "../../lib/tauri";
 import { basename, viewerKindFor } from "../workspace/model";
-import { sortEntries, useActiveCwd } from "./util";
+import { useActiveCwd } from "./useActiveCwd";
+import { sortEntries } from "./util";
 
 /**
  * The workspace tab: a project tree **rooted at the folder the active terminal was launched in**. Unlike

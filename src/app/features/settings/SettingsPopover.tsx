@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Icon from "../../components/Icon";
 import { useT } from "../../lib/i18n";
+import { isFavorite, removeFavorite, toggleFavorite } from "../explorer/favorites";
 import { useSettings } from "./store";
 
 /** Accent choices — key persisted to settings, swatch shown in the picker (dark-mode hex as reference). */
@@ -316,7 +317,7 @@ export default function SettingsPopover() {
                   <button
                     type="button"
                     title={t("common.remove")}
-                    onClick={() => update({ favorites: s.favorites.filter((x) => x !== f) })}
+                    onClick={() => update({ favorites: removeFavorite(s.favorites, f) })}
                   >
                     <Icon name="close" size={13} />
                   </button>
@@ -326,8 +327,9 @@ export default function SettingsPopover() {
                 type="button"
                 className="set-fav-add"
                 onClick={async () => {
+                  // Via the shared helper: an exact `includes` let `C:\Users` and `c:\users` both in.
                   const p = await pickDir();
-                  if (p && !s.favorites.includes(p)) update({ favorites: [...s.favorites, p] });
+                  if (p && !isFavorite(s.favorites, p)) update({ favorites: toggleFavorite(s.favorites, p) });
                 }}
               >
                 {t("settings.addFavorite")}
