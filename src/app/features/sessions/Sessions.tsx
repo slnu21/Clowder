@@ -9,6 +9,8 @@ import { leafIdForPty } from "../terminal/terminalPool";
 import { useWorkspace } from "../workspace/store";
 import {
   onSessionsUpdate,
+  sessionDismiss,
+  sessionsDismissDead,
   sessionsSnapshot,
   type SessionsSnapshot,
   type SessionView,
@@ -123,6 +125,12 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
   // panel returns only what goes inside.
   const body = (
     <>
+      {/* Only when there's something to sweep — otherwise it costs a row of a narrow rail for nothing. */}
+      {sessions.some((s) => s.status === "dead") && (
+        <button className="session-sweep" onClick={() => void sessionsDismissDead()}>
+          {t("sessions.dismissDead")}
+        </button>
+      )}
       <div className="session-list">
         {asking ? (
           <div className="track-prompt">
@@ -216,7 +224,9 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
 
   return (
     <div
-      className={"session " + s.status + (linkedLeaf ? " linked" : "")}
+      className={
+        "session " + s.status + (linkedLeaf ? " linked" : "") + (s.ownerUnknown ? " owner-unknown" : "")
+      }
       onMouseDown={() => linkedLeaf && focusLeaf(linkedLeaf)}
       title={linkedLeaf ? t("sessions.jumpToPane") : undefined}
     >
@@ -228,7 +238,25 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
             <Icon name="session-link" size={13} />
           </span>
         )}
+        {/* Liveness can't judge this one, so it will never clear itself — say so rather than let the
+            user wonder why it won't go away. Its dismiss button stays visible for the same reason. */}
+        {s.ownerUnknown && (
+          <span className="session-unknown" title={t("sessions.ownerUnknown")}>
+            ?
+          </span>
+        )}
         <span className="session-elapsed">{elapsed(s.statusSince, now)}</span>
+        <button
+          className="session-dismiss"
+          title={t("sessions.dismiss")}
+          aria-label={t("sessions.dismiss")}
+          // The card's own onMouseDown jumps to the pane; without this, removing a card also moves
+          // focus somewhere the user didn't ask to go.
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => void sessionDismiss(s.sessionId).catch(() => {})}
+        >
+          <Icon name="close" size={11} />
+        </button>
       </div>
       <div className="session-meta">
         <span className="session-status">{STATUS_KEY[s.status] ? t(STATUS_KEY[s.status]) : s.status}</span>

@@ -12,7 +12,7 @@
 //! which a poll simply doesn't. Sub-second latency is plenty for "don't miss a permission prompt".
 
 use crate::correlate;
-use crate::liveness::is_owner_alive;
+use crate::liveness::{owner_state, Owner};
 use crate::pty::PtyState;
 use crate::spool::{self, SessionRecord};
 use serde::Serialize;
@@ -26,6 +26,12 @@ const POLL: Duration = Duration::from_millis(500);
 const LIVENESS_EVERY: u32 = 20; // 20 × 500 ms = 10 s, matching Vigil's sweep
 /// How long a dead session lingers (shown as 종료됨) before its spool file is reaped.
 const DEAD_GRACE: Duration = Duration::from_secs(15);
+/// How long a dismissed session stays suppressed.
+///
+/// Short on purpose. If the delete actually failed — file locked, or a root we can't write — the
+/// honest outcome is the card coming back, because Vigil's rail still shows that session and
+/// pretending otherwise would be a lie. Ten seconds covers a transient lock and several poll cycles.
+const DISMISS_TOMBSTONE: Duration = Duration::from_secs(10);
 
 pub const EVENT: &str = "sessions:update";
 
@@ -57,6 +63,10 @@ pub struct SessionView {
     pub ctx_tokens: Option<String>,
     /// Correlated PTY id (the pane running this session), or null for a foreign/uncorrelated session.
     pub pane_id: Option<u64>,
+    /// No owning process was ever recorded, so liveness has nothing to judge — this card will **not**
+    /// clear itself. The rail says so and keeps its dismiss button visible, because otherwise the user
+    /// is back to "why won't this go away".
+    pub owner_unknown: bool,
     pub subagents: Vec<SubagentView>,
 }
 
@@ -101,25 +111,52 @@ struct Session {
 }
 
 impl Session {
+    /// Fold one spool record in.
+    ///
+    /// Whether a field may be overwritten with `None` depends on what its absence *means*. For an
+    /// event-scoped field a missing value means "not happening any more" and must clear; for a
+    /// lifetime-constant field it only means "this record didn't carry it", and clearing it destroys
+    /// knowledge no later record can restore.
     fn apply(&mut self, r: &SessionRecord) {
+        // The record's reason for existing — never sticky.
         self.status = normalize_status(r.status.as_deref());
         self.status_since = r.status_since.clone();
-        self.transcript_path = r.transcript_path.clone();
-        self.cwd = r.cwd.clone();
+        // Event-scoped: keeping a stale "needs your approval" on a card that has moved on is a lie.
         self.message = r.message.clone();
         self.tool_name = r.tool_name.clone();
-        self.claude_pid = r.claude_pid;
-        self.claude_started_at = r.claude_started_at.clone();
+        // Constant for the session's lifetime, and not every producer writes every field: Vigil's
+        // records carry no `toolName` at all. Losing `cwd` blanks the card's name; losing the
+        // transcript path silently disables `demote_stale_permission`.
+        if r.cwd.is_some() {
+            self.cwd = r.cwd.clone();
+        }
+        if r.transcript_path.is_some() {
+            self.transcript_path = r.transcript_path.clone();
+        }
+        // **The field whose loss made dead sessions immortal.** One failed ancestor walk used to
+        // write `claudePid: null`, this overwrote a pid we already knew, and liveness could never
+        // judge that session again. A fresh pid still wins (that is `claude --resume`), but a null
+        // no longer erases one.
+        //
+        // pid and birth instant move **together**: a new pid paired with a stale start time would
+        // look like a reused pid and reap a live session.
+        if let Some(pid) = r.claude_pid.filter(|p| *p > 0) {
+            self.claude_pid = Some(pid);
+            self.claude_started_at = r.claude_started_at.clone();
+        }
     }
 }
 
 #[derive(Default)]
 struct Inner {
     sessions: HashMap<String, Session>,
+    /// Cards the user just dismissed, kept briefly so the next poll doesn't put them straight back.
+    dismissed: HashMap<String, Instant>,
 }
 
 pub struct SessionsState {
     last: Arc<Mutex<SessionsSnapshot>>,
+    inner: Arc<Mutex<Inner>>,
 }
 
 impl SessionsState {
@@ -134,19 +171,62 @@ pub fn sessions_snapshot(state: tauri::State<'_, SessionsState>) -> SessionsSnap
     state.snapshot()
 }
 
+/// Remove one card and the spool files behind it.
+///
+/// This is the escape hatch for sessions liveness cannot judge (no recorded owner pid), which is the
+/// one case nothing clears automatically — by design, since there is no time-based guessing here.
+///
+/// **Dismissing a session that is actually alive is safe**: every modelled hook rewrites the whole
+/// spool record via `write_atomic`, so the card comes back on that session's next event, with no
+/// `dead` latch attached. That self-healing is why there is no confirmation dialog.
+///
+/// Deletes files ⇒ `(async)` (ADR 0003). The `Err` string is diagnostic only — the frontend ignores
+/// it, because the honest signal that a delete failed is the card reappearing after the tombstone.
+#[tauri::command(async)]
+pub fn session_dismiss(id: String, state: tauri::State<'_, SessionsState>) -> Result<(), String> {
+    dismiss_one(&state, &id)
+}
+
+/// Clear every card currently latched dead. Returns how many were cleared.
+#[tauri::command(async)]
+pub fn sessions_dismiss_dead(state: tauri::State<'_, SessionsState>) -> usize {
+    let dead: Vec<String> = {
+        let inner = state.inner.lock().unwrap();
+        inner.sessions.iter().filter(|(_, s)| s.dead).map(|(id, _)| id.clone()).collect()
+    };
+    dead.iter().filter(|id| dismiss_one(&state, id).is_ok()).count()
+}
+
+fn dismiss_one(state: &SessionsState, id: &str) -> Result<(), String> {
+    // Delete outside the lock: the poll thread takes it every 500 ms and must never wait on a disk.
+    let clean = spool::reap_session(id);
+    {
+        let mut inner = state.inner.lock().unwrap();
+        inner.sessions.remove(id);
+        inner.dismissed.insert(id.to_string(), Instant::now());
+    }
+    if clean {
+        Ok(())
+    } else {
+        Err(format!("spool files remain for {id}"))
+    }
+}
+
 /// Spawn the polling thread and return the state to `manage`. The command layer reads `last` for the
 /// initial load; the thread emits [`EVENT`] on every change.
 pub fn start(app: AppHandle) -> SessionsState {
+    sweep_orphan_usage();
     let inner = Arc::new(Mutex::new(Inner::default()));
     let last = Arc::new(Mutex::new(SessionsSnapshot::default()));
 
     let t_last = Arc::clone(&last);
+    let t_inner = Arc::clone(&inner);
     std::thread::spawn(move || {
         let mut tick: u32 = 0;
         loop {
             let do_liveness = tick == 0 || tick % LIVENESS_EVERY == 0; // startup sweep, then every 10 s
             let panes = app.state::<PtyState>().pane_pids();
-            let snapshot = assemble(&inner, do_liveness, &panes);
+            let snapshot = assemble(&t_inner, do_liveness, &panes);
             {
                 let mut prev = t_last.lock().unwrap();
                 if *prev != snapshot {
@@ -159,7 +239,7 @@ pub fn start(app: AppHandle) -> SessionsState {
         }
     });
 
-    SessionsState { last }
+    SessionsState { last, inner }
 }
 
 fn assemble(
@@ -168,15 +248,23 @@ fn assemble(
     panes: &HashMap<u64, u32>,
 ) -> SessionsSnapshot {
     let mut records = spool::read_sessions();
-    // Both spool roots (Vigil + Clowder) can hold the same session. Apply oldest→newest so the freshest
-    // status wins the merge (ISO `statusSince` sorts chronologically).
-    records.sort_by(|a, b| a.status_since.cmp(&b.status_since));
+    // Both spool roots (Vigil + Clowder) can hold the same session. Apply oldest→newest so the
+    // freshest status wins the merge.
+    merge_order(&mut records);
     let mut inner = inner.lock().unwrap();
+
+    inner.dismissed.retain(|_, t| t.elapsed() < DISMISS_TOMBSTONE);
 
     // Merge spool records into the live model (Dead sessions are terminal — skip their apply).
     let mut seen = std::collections::HashSet::new();
     for r in &records {
         let Some(id) = r.session_id.clone() else { continue };
+        // Just dismissed: stay out of `seen` too, so a spool file we failed to delete doesn't put the
+        // card back on the very next tick. When the tombstone expires the session returns if it is
+        // genuinely still there — that is the recovery path for a mistaken dismiss.
+        if inner.dismissed.contains_key(&id) {
+            continue;
+        }
         seen.insert(id.clone());
         let s = inner.sessions.entry(id).or_default();
         if !s.dead {
@@ -184,29 +272,48 @@ fn assemble(
         }
     }
 
-    // Correlate sessions we haven't placed yet: walk each one's claude pid up the process tree to a
-    // pane shell. The parent-map snapshot is built at most once per tick, and only when there's an
-    // uncorrelated session with a live pid and at least one pane to match against.
-    if !panes.is_empty()
+    // **One process snapshot per tick, at most** — correlation and the liveness sweep both need the
+    // same table, so they share it. Correlation wants it only while a session is still unplaced; the
+    // sweep wants it every 10 s. In the steady state that means one enumeration per 10 s, not per poll.
+    let need_correlate = !panes.is_empty()
         && inner
             .sessions
             .values()
-            .any(|s| s.pane_id.is_none() && s.claude_pid.is_some_and(|p| p > 0))
-    {
-        let parent = correlate::build_parent_map();
-        for s in inner.sessions.values_mut() {
-            if s.pane_id.is_none() {
-                if let Some(pid) = s.claude_pid.filter(|p| *p > 0) {
-                    s.pane_id = correlate::find_owning_pane(&parent, pid as u32, panes);
+            .any(|s| s.pane_id.is_none() && s.claude_pid.is_some_and(|p| p > 0));
+    let need_liveness = do_liveness && inner.sessions.values().any(|s| !s.dead);
+    let table = (need_correlate || need_liveness)
+        .then(correlate::ProcTable::capture)
+        .flatten();
+
+    // Correlate sessions we haven't placed yet: walk each one's claude pid up the process tree to a
+    // pane shell.
+    if need_correlate {
+        if let Some(table) = table.as_ref() {
+            for s in inner.sessions.values_mut() {
+                if s.pane_id.is_none() {
+                    if let Some(pid) = s.claude_pid.filter(|p| *p > 0) {
+                        s.pane_id = correlate::find_owning_pane(table, pid as u32, panes);
+                    }
                 }
             }
         }
     }
 
     if do_liveness {
-        // Latch newly-dead owners.
+        // Latch owners we can **prove** are gone. `Unknown` — no recorded pid, or no believable
+        // snapshot — deliberately does nothing: there is no time-based fallback here, because a
+        // session left open for hours is normal and silence is not evidence of death. Those cards
+        // say so on the rail and the user dismisses them.
         for s in inner.sessions.values_mut() {
-            if !s.dead && !is_owner_alive(s.claude_pid.unwrap_or(0), s.claude_started_at.as_deref()) {
+            if s.dead {
+                continue;
+            }
+            let verdict = owner_state(
+                s.claude_pid.unwrap_or(0),
+                s.claude_started_at.as_deref(),
+                table.as_ref(),
+            );
+            if verdict == Owner::Gone {
                 s.dead = true;
                 s.dead_since = Some(Instant::now());
             }
@@ -219,7 +326,7 @@ fn assemble(
             .map(|(id, _)| id.clone())
             .collect();
         for id in reap {
-            spool::reap_session(&id);
+            let _ = spool::reap_session(&id);
         }
     }
 
@@ -287,6 +394,7 @@ fn assemble(
                 ctx_percent: s.ctx_percent,
                 ctx_tokens: s.ctx_tokens.clone(),
                 pane_id: s.pane_id,
+                owner_unknown: !s.claude_pid.is_some_and(|p| p > 0),
                 subagents: subs.remove(id).unwrap_or_default(),
             }
         })
@@ -383,6 +491,85 @@ fn parse_iso_secs(s: &str) -> Option<i64> {
     Some(days_from_civil(y, mo, d) * 86_400 + h * 3600 + mi * 60 + se)
 }
 
+/// How stale a usage file must be before we treat it as an orphan. `--statusline` can write one
+/// before the session's first hook creates the session file, so a brand-new session briefly looks
+/// orphaned; an hour is far past that race and far short of anything a user would miss.
+const ORPHAN_USAGE_MIN_AGE: u64 = 3600;
+
+/// Delete usage files whose session is long gone. Startup only — nothing here needs re-checking every
+/// tick, and walking two directories on a 500 ms timer to find nothing would be pure waste.
+///
+/// These accumulate because usage is written by `--statusline`, which is not a hook and therefore has
+/// no lifecycle: when a session dies without `SessionEnd`, its usage file simply stays.
+fn sweep_orphan_usage() {
+    let live: std::collections::HashSet<String> =
+        spool::read_sessions().into_iter().filter_map(|r| r.session_id).collect();
+    let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) else {
+        return; // clock before the epoch: skip rather than delete on a bad comparison
+    };
+    for id in orphan_usage_ids(&spool::usage_entries(), &live, now.as_secs(), ORPHAN_USAGE_MIN_AGE) {
+        let _ = spool::reap_session(&id);
+    }
+}
+
+/// Usage ids with no live session, older than the floor, deduplicated across roots. Pure.
+fn orphan_usage_ids(
+    usage: &[(String, u64)],
+    live: &std::collections::HashSet<String>,
+    now_secs: u64,
+    min_age_secs: u64,
+) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    usage
+        .iter()
+        .filter(|(id, mtime)| {
+            !live.contains(id) && now_secs.saturating_sub(*mtime) >= min_age_secs
+        })
+        .filter(|(id, _)| seen.insert(id.clone()))
+        .map(|(id, _)| id.clone())
+        .collect()
+}
+
+/// Order records for the merge: oldest first, so the freshest status is applied last and wins.
+///
+/// **The two producers stamp `statusSince` differently** — Clowder writes second precision
+/// (`2026-08-13T13:54:30Z`), Vigil writes seven fractional digits (`...:30.5982260Z`). Comparing
+/// those as *strings* — which is what this used to do — sorts every fractional stamp **before** a
+/// whole-second one in the same second, because `'.'` (0x2E) is below `'Z'` (0x5A). That inverts the
+/// truth: a Vigil `awaiting_permission` written 0.6 s *after* a Clowder `working` gets applied first
+/// and loses, and the rail silently misses a permission prompt — the one thing it exists to catch.
+fn merge_order(records: &mut [SessionRecord]) {
+    // Reverse(root_rank) puts Clowder (rank 0) last on an exact tie, so the record that carries more
+    // fields (Vigil's have no `toolName`) is the one that wins.
+    records.sort_by_key(|r| {
+        (
+            spool_sort_key(r.status_since.as_deref()),
+            std::cmp::Reverse(r.root_rank),
+        )
+    });
+}
+
+/// A spool timestamp as `(unix seconds, 100-ns fraction)`, accepting either producer's precision.
+/// `None` (unparseable) sorts first, losing to anything readable.
+fn spool_sort_key(status_since: Option<&str>) -> Option<(i64, u32)> {
+    let s = status_since?;
+    Some((parse_iso_secs(s)?, iso_fraction_ticks(s)))
+}
+
+/// The `.ddddddd` that may follow the seconds, as 100-ns ticks. Absent or malformed → 0, which is
+/// exactly right: a whole-second stamp *is* the start of that second.
+fn iso_fraction_ticks(s: &str) -> u32 {
+    let Some(rest) = s.get(19..).and_then(|r| r.strip_prefix('.')) else {
+        return 0;
+    };
+    let digits = rest.as_bytes();
+    // Left-aligned to 7 digits (FILETIME resolution): ".5" is 5_000_000 ticks, not 5.
+    (0..7).fold(0u32, |acc, i| {
+        let d = digits.get(i).filter(|b| b.is_ascii_digit()).map_or(0, |b| (b - b'0') as u32);
+        acc * 10 + d
+    })
+}
+
 /// Howard Hinnant's `days_from_civil`: (year, month, day) → days since 1970-01-01. Inverse of
 /// `beacon::civil_from_days`.
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
@@ -416,6 +603,124 @@ fn kilo(n: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rec(status: &str, since: &str, root_rank: u8) -> SessionRecord {
+        SessionRecord {
+            session_id: Some("s".into()),
+            status: Some(status.into()),
+            status_since: Some(since.into()),
+            root_rank,
+            ..Default::default()
+        }
+    }
+
+    fn merged(mut records: Vec<SessionRecord>) -> Session {
+        merge_order(&mut records);
+        let mut s = Session::default();
+        for r in &records {
+            s.apply(r);
+        }
+        s
+    }
+
+    /// The bug this replaced. String comparison sorted Vigil's fractional stamp *before* Clowder's
+    /// whole-second one inside the same second, so an approval prompt written 0.6 s later was applied
+    /// first and lost — the rail missed 승인 대기. Drop the fraction from the sort key and this fails.
+    #[test]
+    fn the_later_record_wins_within_the_same_second() {
+        let clowder = rec("working", "2026-08-13T13:54:30Z", 0);
+        let vigil = rec("awaiting_permission", "2026-08-13T13:54:30.5982260Z", 1);
+
+        // Whichever order they come off disk in.
+        assert_eq!(merged(vec![clowder.clone(), vigil.clone()]).status, "awaiting_permission");
+        assert_eq!(merged(vec![vigil, clowder]).status, "awaiting_permission");
+    }
+
+    /// On an exact tie the richer record must land last: Vigil's session records carry no `toolName`,
+    /// so letting them win would blank the tool name on every tie.
+    #[test]
+    fn an_exact_tie_goes_to_the_clowder_record() {
+        let mut records = vec![
+            rec("idle", "2026-08-13T13:54:30Z", 1),
+            rec("working", "2026-08-13T13:54:30Z", 0),
+        ];
+        merge_order(&mut records);
+        assert_eq!(records.last().unwrap().root_rank, 0);
+    }
+
+    #[test]
+    fn sort_key_reads_both_producers() {
+        let frac = |s| spool_sort_key(Some(s)).map(|(_, f)| f);
+        assert_eq!(frac("2026-08-13T13:54:30Z"), Some(0));
+        assert_eq!(frac("2026-08-13T13:54:30.5982260Z"), Some(5_982_260));
+        assert_eq!(frac("2026-08-13T13:54:30.5Z"), Some(5_000_000)); // left-aligned, not 5
+        assert_eq!(spool_sort_key(None), None);
+        assert_eq!(spool_sort_key(Some("not-a-date")), None);
+        // A fraction orders strictly after the whole second it belongs to.
+        assert!(spool_sort_key(Some("2026-08-13T13:54:30Z")) < spool_sort_key(Some("2026-08-13T13:54:30.0000001Z")));
+    }
+
+    /// Both directions carry weight. Make everything sticky and a finished tool keeps its name on the
+    /// card forever; make nothing sticky and one failed ancestor walk erases the owner pid for good,
+    /// which is exactly how a crashed session became immortal.
+    #[test]
+    fn apply_keeps_identity_and_clears_event_fields() {
+        let mut s = Session::default();
+        s.apply(&SessionRecord {
+            status: Some("working".into()),
+            status_since: Some("2026-08-13T13:54:30Z".into()),
+            cwd: Some("C:/w".into()),
+            transcript_path: Some("C:/t.jsonl".into()),
+            message: Some("approve?".into()),
+            tool_name: Some("Bash".into()),
+            claude_pid: Some(4242),
+            claude_started_at: Some("133700000000000000".into()),
+            ..Default::default()
+        });
+        // A later record from a producer whose snapshot failed: no owner, no tool, no cwd.
+        s.apply(&rec("idle", "2026-08-13T13:55:00Z", 1));
+
+        assert_eq!(s.claude_pid, Some(4242), "owner pid must survive a record that lacks it");
+        assert_eq!(s.claude_started_at.as_deref(), Some("133700000000000000"));
+        assert_eq!(s.cwd.as_deref(), Some("C:/w"));
+        assert_eq!(s.transcript_path.as_deref(), Some("C:/t.jsonl"));
+        assert_eq!(s.message, None, "event-scoped fields must clear");
+        assert_eq!(s.tool_name, None);
+        assert_eq!(s.status, "idle");
+    }
+
+    /// `claude --resume` keeps the session id but starts a new process — a real pid always wins, and
+    /// it brings its own birth instant with it (a mismatched pair would read as a reused pid).
+    #[test]
+    fn a_fresh_owner_replaces_the_remembered_one() {
+        let mut s = Session::default();
+        s.apply(&SessionRecord {
+            claude_pid: Some(1),
+            claude_started_at: Some("100".into()),
+            ..Default::default()
+        });
+        s.apply(&SessionRecord {
+            claude_pid: Some(2),
+            claude_started_at: Some("200".into()),
+            ..Default::default()
+        });
+        assert_eq!((s.claude_pid, s.claude_started_at.as_deref()), (Some(2), Some("200")));
+    }
+
+    /// The age floor is not decoration: `--statusline` writes usage before the first hook writes the
+    /// session, so a session seconds old legitimately has no session file yet.
+    #[test]
+    fn orphan_usage_needs_both_no_session_and_some_age() {
+        let live = std::collections::HashSet::from(["alive".to_string()]);
+        let now = 10_000u64;
+        let usage = vec![
+            ("alive".to_string(), 0),           // has a session → keep
+            ("gone".to_string(), 0),            // orphan and old → reap
+            ("gone".to_string(), 0),            // same id in the other root → reported once
+            ("just-started".to_string(), now),  // orphan but newborn → keep
+        ];
+        assert_eq!(orphan_usage_ids(&usage, &live, now, 3600), vec!["gone"]);
+    }
 
     #[test]
     fn iso_parse_is_the_inverse_of_unix_to_iso() {

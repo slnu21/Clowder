@@ -98,6 +98,63 @@ fn statusline_round_trip() -> (bool, String) {
     )
 }
 
+/// Spawn a process that exits immediately and return its pid, after waiting for it. A pid we watched
+/// finish is the one thing on this machine we can be certain is not running.
+fn finished_pid() -> Option<u32> {
+    use std::os::windows::process::CommandExt as _;
+    let mut child = std::process::Command::new("cmd.exe")
+        .args(["/c", "exit", "0"])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .spawn()
+        .ok()?;
+    let pid = child.id();
+    let _ = child.wait();
+    Some(pid)
+}
+
+/// Reap must take all three file kinds for one session, leave every other session alone, and refuse
+/// an id that would escape the spool directory.
+fn reap_is_scoped() -> (bool, String) {
+    let Some(root) = crate::spool::clowder_dir() else {
+        return (false, "LOCALAPPDATA unset".into());
+    };
+    const ID: &str = "_selftest-reap";
+    const NEIGHBOUR: &str = "_selftest-keep";
+
+    for dir in ["sessions", "usage", "subagents"] {
+        let _ = fs::create_dir_all(root.join(dir));
+    }
+    let session = root.join("sessions").join(format!("{ID}.json"));
+    let usage = root.join("usage").join(format!("{ID}.json"));
+    let agent = root.join("subagents").join(format!("{ID}-agent.json"));
+    let neighbour = root.join("sessions").join(format!("{NEIGHBOUR}.json"));
+    // One level above `sessions\` — exactly where a `..\` id would land.
+    let outsider = root.join("_selftest-outsider.json");
+
+    let _ = fs::write(&session, format!(r#"{{"sessionId":"{ID}"}}"#));
+    let _ = fs::write(&usage, format!(r#"{{"sessionId":"{ID}"}}"#));
+    let _ = fs::write(&agent, format!(r#"{{"agentId":"a","sessionId":"{ID}"}}"#));
+    let _ = fs::write(&neighbour, format!(r#"{{"sessionId":"{NEIGHBOUR}"}}"#));
+    let _ = fs::write(&outsider, b"keep me");
+
+    let reported_clean = crate::spool::reap_session(ID);
+    let mine_gone = !session.exists() && !usage.exists() && !agent.exists();
+    let neighbour_kept = neighbour.exists();
+    let traversal_refused =
+        !crate::spool::reap_session(r"..\_selftest-outsider") && outsider.exists();
+
+    for p in [&session, &usage, &agent, &neighbour, &outsider] {
+        let _ = fs::remove_file(p);
+    }
+
+    (
+        reported_clean && mine_gone && neighbour_kept && traversal_refused,
+        format!(
+            "all three removed={mine_gone}, neighbour kept={neighbour_kept}, traversal refused={traversal_refused}"
+        ),
+    )
+}
+
 pub fn run() -> i32 {
     let mut t = SelfTest::new();
 
@@ -213,7 +270,88 @@ pub fn run() -> i32 {
     let sane = !ports.is_empty() && ports.iter().all(|p| p.port != 0);
     t.check("ports_table_read", sane, format!("{} listening port(s)", ports.len()));
 
-    // M5 adds: spool parse/sort/reap, ancestor walk.
+    // --- session liveness (real Win32, not just the unit tests) ---
+    // Two opposite failures live here: reaping a session that is alive (the worst thing this app can
+    // do) and never reaping one that crashed (the bug users actually hit). Both turn on this verdict,
+    // so assert it against real processes — the pure rules are covered by `cargo test`, but nothing
+    // there proves the snapshot and the clock actually return usable values on this machine.
+    let table = crate::correlate::ProcTable::capture();
+    let me = std::process::id();
+    t.check(
+        "proc_table_captured",
+        table.as_ref().is_some_and(|tbl| tbl.contains(me)),
+        match table.as_ref() {
+            Some(tbl) => format!("{} processes, self present", tbl.process_count()),
+            None => "no believable process snapshot".into(),
+        },
+    );
+
+    if let Some(tbl) = table.as_ref() {
+        use crate::liveness::{creation_filetime, judge, owner_state, Owner, OwnerProbe};
+
+        let my_start = creation_filetime(me).map(|c| c.to_string());
+
+        // We are running, but we are not claude.exe — the name rule must call that a reused pid.
+        // This is the check that used to be missing entirely, letting a reused pid read as alive.
+        let mismatch = owner_state(me as i32, my_start.as_deref(), Some(tbl));
+        t.check(
+            "liveness_name_mismatch_is_gone",
+            mismatch == Owner::Gone,
+            format!("self is {} → {mismatch:?}", tbl.name(me).unwrap_or("?")),
+        );
+
+        // Same real snapshot and clock, wearing the expected name: proves the FILETIME comparison
+        // works on live values, not just on the constants in the unit tests.
+        let alive = judge(&OwnerProbe {
+            pid: me as i32,
+            started_at: my_start.as_deref().and_then(|s| s.parse().ok()),
+            table_available: true,
+            image: Some(crate::correlate::CLAUDE_IMAGE.to_string()),
+            creation: creation_filetime(me),
+        });
+        t.check(
+            "liveness_alive_when_name_matches",
+            alive == Owner::Alive,
+            format!("{alive:?} (start {})", my_start.as_deref().unwrap_or("unread")),
+        );
+
+        // A pid we watched exit.
+        let finished = finished_pid();
+        let dead = finished.map(|p| owner_state(p as i32, None, Some(tbl)));
+        t.check(
+            "liveness_finished_pid_is_gone",
+            dead == Some(Owner::Gone),
+            match (finished, dead) {
+                (Some(p), Some(v)) => format!("pid {p} → {v:?}"),
+                _ => "could not spawn a probe process".into(),
+            },
+        );
+
+        // The two states that must never reap. Flip either to Gone and every live session dies.
+        let no_pid = owner_state(0, None, Some(tbl));
+        let no_table = owner_state(me as i32, my_start.as_deref(), None);
+        t.check(
+            "liveness_unknown_is_not_death",
+            no_pid == Owner::Unknown && no_table == Owner::Unknown,
+            format!("no pid → {no_pid:?}, no snapshot → {no_table:?}"),
+        );
+    } else {
+        // Without a snapshot the four checks above cannot run — and a check that silently disappears
+        // is not a check. Fail them explicitly so the report keeps a constant shape.
+        for name in [
+            "liveness_name_mismatch_is_gone",
+            "liveness_alive_when_name_matches",
+            "liveness_finished_pid_is_gone",
+            "liveness_unknown_is_not_death",
+        ] {
+            t.check(name, false, "skipped: no process snapshot");
+        }
+    }
+
+    // --- spool reap scope ---
+    // `session_dismiss` made `reap_session` reachable from the frontend, so its id is now untrusted.
+    let (ok, detail) = reap_is_scoped();
+    t.check("spool_reap_is_scoped", ok, detail);
 
     let result = if t.failed == 0 { "OK" } else { "FAIL" };
     let report = format!("{}\nRESULT={}\n", t.lines, result);

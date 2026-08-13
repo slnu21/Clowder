@@ -64,7 +64,9 @@ pub fn run() {
         // they were typed, and IPC messages are drained in order on one thread; scattering them across
         // threadpool tasks would let two writes race. Sync on a main thread that is no longer blocked
         // is both ordered and immediate. `quote_path_cmd` (pure string work) and `sessions_snapshot`
-        // (a mutex clone) are sync because they are already microseconds.
+        // (a mutex clone) are sync because they are already microseconds. `session_dismiss` and
+        // `sessions_dismiss_dead` delete spool files, so they are `(async)` like every other command
+        // that touches the disk.
         .invoke_handler(tauri::generate_handler![
             default_shell,
             pty::pty_spawn,
@@ -95,6 +97,8 @@ pub fn run() {
             link::resolve_link_target,
             quote::quote_path_cmd,
             sessions::sessions_snapshot,
+            sessions::session_dismiss,
+            sessions::sessions_dismiss_dead,
             settings::get_settings,
             settings::save_settings,
             settings::resolve_shell_cmd,
