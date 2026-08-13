@@ -23,6 +23,8 @@ export type SessionView = {
   ctxTokens?: string | null;
   /** Correlated PTY id, or null for a foreign/uncorrelated session (Phase B). */
   paneId?: number | null;
+  /** No owning process was recorded, so liveness can't judge this card — it won't clear itself. */
+  ownerUnknown: boolean;
   subagents: SubagentView[];
 };
 
@@ -45,3 +47,12 @@ export const sessionsSnapshot = () => invoke<SessionsSnapshot>("sessions_snapsho
 /** Subscribe to board updates pushed from the Rust watcher thread. */
 export const onSessionsUpdate = (cb: (s: SessionsSnapshot) => void): Promise<UnlistenFn> =>
   listen<SessionsSnapshot>("sessions:update", (e) => cb(e.payload));
+
+/**
+ * Remove one card and the spool files behind it. Safe on a live session: the next hook rewrites the
+ * spool and the card returns, which is why there's no confirmation step.
+ */
+export const sessionDismiss = (id: string) => invoke<void>("session_dismiss", { id });
+
+/** Clear every card currently marked ended. Resolves to how many were cleared. */
+export const sessionsDismissDead = () => invoke<number>("sessions_dismiss_dead");

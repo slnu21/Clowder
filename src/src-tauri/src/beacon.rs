@@ -22,10 +22,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// child (Git Bash) without this flag makes Windows allocate a brand-new console window that flashes on
 /// screen. Since the statusline delegate runs on every render, that flash is constant. This suppresses it.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::correlate::{is_claude_image, ProcTable};
 use windows::Win32::Foundation::{CloseHandle, FILETIME};
-use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
-};
 use windows::Win32::System::Threading::{
     GetCurrentProcessId, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
@@ -118,6 +116,15 @@ struct SpoolOut {
     claude_started_at: Option<String>,
 }
 
+/// Just the owner fields of an existing `sessions\<id>.json`, so a hook that failed to identify the
+/// owner can keep what an earlier one already established. See [`carry_forward_owner`].
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct PreviousOwner {
+    claude_pid: Option<i32>,
+    claude_started_at: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct SubagentOut {
@@ -180,6 +187,11 @@ pub fn run(args: &[String]) {
     match ev.as_str() {
         "SessionEnd" => {
             let _ = std::fs::remove_file(&target);
+            // The usage file is written by `--statusline`, not by a hook, so nothing else will ever
+            // clean it up — leaving it here is how that directory grew without bound.
+            if let Some(usage) = subdir("usage") {
+                let _ = std::fs::remove_file(usage.join(format!("{session_id}.json")));
+            }
             subagents_remove_for_session(&session_id);
             return;
         }
@@ -200,7 +212,8 @@ pub fn run(args: &[String]) {
         return; // unmodelled event: leave the spool alone (don't demote a Stop's awaiting_input)
     };
 
-    let (pid, created) = find_claude_ancestor();
+    let (claude_pid, claude_started_at) =
+        carry_forward_owner(find_claude_ancestor(), previous_owner(&target));
     let out = SpoolOut {
         session_id: session_id.clone(),
         status: status.to_string(),
@@ -211,8 +224,8 @@ pub fn run(args: &[String]) {
         message: input.message,
         tool_name: input.tool_name,
         tool_detail: input.tool_input.and_then(|t| t.command.or(t.file_path)),
-        claude_pid: (pid > 0).then_some(pid),
-        claude_started_at: created.map(|c| c.to_string()),
+        claude_pid,
+        claude_started_at,
     };
     if let Ok(json) = serde_json::to_string(&out) {
         write_atomic(&target, &json);
@@ -481,49 +494,49 @@ fn subagent_write_file(rec: &SubagentOut) {
 // ---- process ancestry (port of BeaconNative.cs) ----
 
 /// Walk up from this process to the nearest `claude.exe` ancestor; return its pid + creation FILETIME.
+///
+/// `(0, None)` means **"we could not tell"**, not "there is no owner" — and it is the value that used
+/// to poison a session forever, because the consumer wrote that null over a pid it already knew. Two
+/// things guard it now: [`ProcTable::capture`] retries a failed snapshot, and the caller carries the
+/// previous record's owner forward rather than persisting a null (see [`carry_forward_owner`]).
 fn find_claude_ancestor() -> (i32, Option<i64>) {
-    let mut parent: HashMap<u32, u32> = HashMap::new();
-    let mut name: HashMap<u32, String> = HashMap::new();
-    unsafe {
-        let snap = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
-            Ok(h) => h,
-            Err(_) => return (0, None),
-        };
-        let mut e = PROCESSENTRY32W {
-            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
-            ..Default::default()
-        };
-        if Process32FirstW(snap, &mut e).is_ok() {
-            loop {
-                parent.insert(e.th32ProcessID, e.th32ParentProcessID);
-                name.insert(e.th32ProcessID, exe_name(&e.szExeFile));
-                if Process32NextW(snap, &mut e).is_err() {
-                    break;
-                }
-            }
-        }
-        let _ = CloseHandle(snap);
-    }
-
-    let mut pid = unsafe { GetCurrentProcessId() };
-    for _ in 0..24 {
-        if pid == 0 {
-            break;
-        }
-        if name.get(&pid).is_some_and(|n| n.eq_ignore_ascii_case("claude.exe")) {
+    let Some(table) = ProcTable::capture() else {
+        return (0, None); // no believable snapshot — say "unknown", never guess an owner
+    };
+    let me = unsafe { GetCurrentProcessId() };
+    for (pid, name) in table.chain(me) {
+        if is_claude_image(name) {
             return (pid as i32, creation_filetime(pid));
-        }
-        match parent.get(&pid) {
-            Some(&p) if p != pid => pid = p,
-            _ => break,
         }
     }
     (0, None)
 }
 
-fn exe_name(buf: &[u16]) -> String {
-    let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    String::from_utf16_lossy(&buf[..end])
+/// The owner recorded by an earlier hook for this session, if the file is there and readable.
+fn previous_owner(target: &std::path::Path) -> PreviousOwner {
+    std::fs::read(target)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Keep an owner we already knew rather than persisting "unknown".
+///
+/// **This is the root fix for immortal session cards.** `find_claude_ancestor` returns `(0, None)`
+/// when it cannot take a process snapshot — a transient, documented failure that gets likelier
+/// exactly when Claude Code is busy spawning processes, which is when hooks fire. That null then
+/// travelled to disk, the consumer wrote it over a pid it already knew, and liveness lost its only
+/// handle on the session forever. A pid is a fact about the session, not about this one hook, so an
+/// ignorant hook must not erase it.
+///
+/// A real pid always wins, which keeps `claude --resume` (same session id, new process) correct.
+/// pid and birth instant move as a pair — a new pid with a remembered start time would look like a
+/// reused pid to the consumer and get the live session reaped.
+fn carry_forward_owner(fresh: (i32, Option<i64>), previous: PreviousOwner) -> (Option<i32>, Option<String>) {
+    match fresh {
+        (pid, created) if pid > 0 => (Some(pid), created.map(|c| c.to_string())),
+        _ => (previous.claude_pid, previous.claude_started_at),
+    }
 }
 
 fn creation_filetime(pid: u32) -> Option<i64> {
@@ -604,4 +617,42 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
     let m = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32; // [1, 12]
     (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{carry_forward_owner, PreviousOwner};
+
+    fn known(pid: i32, started: &str) -> PreviousOwner {
+        PreviousOwner { claude_pid: Some(pid), claude_started_at: Some(started.into()) }
+    }
+
+    /// The whole point: a hook that could not take a process snapshot must not overwrite a pid an
+    /// earlier hook already established. Remove the carry-forward and a single transient snapshot
+    /// failure makes the session unjudgeable forever.
+    #[test]
+    fn an_ignorant_hook_keeps_the_known_owner() {
+        let out = carry_forward_owner((0, None), known(4242, "133700000000000000"));
+        assert_eq!(out, (Some(4242), Some("133700000000000000".to_string())));
+    }
+
+    /// `claude --resume` reuses the session id with a new process, so a real pid always wins — and
+    /// carries its own birth instant, never the remembered one.
+    #[test]
+    fn a_found_owner_always_beats_the_remembered_one() {
+        let out = carry_forward_owner((99, Some(200)), known(4242, "100"));
+        assert_eq!(out, (Some(99), Some("200".to_string())));
+    }
+
+    #[test]
+    fn nothing_known_stays_nothing() {
+        assert_eq!(carry_forward_owner((0, None), PreviousOwner::default()), (None, None));
+    }
+
+    /// A pid without a readable creation time is still a usable owner: liveness treats a name match
+    /// with no clock as alive rather than guessing.
+    #[test]
+    fn a_found_pid_without_a_clock_is_still_recorded() {
+        assert_eq!(carry_forward_owner((7, None), PreviousOwner::default()), (Some(7), None));
+    }
 }

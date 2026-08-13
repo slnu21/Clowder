@@ -5,15 +5,12 @@
 //! muscle deck already has. **Fail-soft throughout** — any API failure yields an empty list, never an
 //! error the UI must render. IPv4 listening sockets only for now (IPv6 is a follow-up).
 
+use crate::correlate::ProcTable;
 use core::ffi::c_void;
 use serde::Serialize;
-use std::collections::HashMap;
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::NetworkManagement::IpHelper::{
     GetExtendedTcpTable, MIB_TCPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL,
-};
-use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
 
@@ -37,11 +34,13 @@ pub struct PortRow {
 /// Listening TCP ports with their owning process, sorted by port. Fail-soft: empty on any failure.
 #[tauri::command(async)]
 pub fn list_ports() -> Vec<PortRow> {
-    let names = proc_name_map();
+    // One process snapshot, shared with the session correlation/liveness code (`correlate::ProcTable`).
+    // `None` means we could not get a believable snapshot — the rows still come back, just unnamed.
+    let table = ProcTable::capture();
     let mut rows = collect_listeners();
     for r in &mut rows {
-        if let Some(n) = names.get(&r.pid) {
-            r.process = n.clone();
+        if let Some(n) = table.as_ref().and_then(|t| t.name(r.pid)) {
+            r.process = n.to_string();
         }
         r.system = is_system_process(&r.process, r.pid);
     }
@@ -103,36 +102,6 @@ fn collect_listeners() -> Vec<PortRow> {
             })
             .collect()
     }
-}
-
-/// pid → executable file name, from one process snapshot. Empty on failure (fail-soft). Mirrors the
-/// Toolhelp snapshot in `correlate::build_parent_map` (that captures parent pids; this captures names)
-/// — kept separate so the tested correlation code stays untouched.
-fn proc_name_map() -> HashMap<u32, String> {
-    let mut map = HashMap::new();
-    unsafe {
-        let snap = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
-            Ok(h) => h,
-            Err(_) => return map,
-        };
-        let mut entry = PROCESSENTRY32W::default();
-        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-        if Process32FirstW(snap, &mut entry).is_ok() {
-            loop {
-                map.insert(entry.th32ProcessID, wide_to_string(&entry.szExeFile));
-                if Process32NextW(snap, &mut entry).is_err() {
-                    break;
-                }
-            }
-        }
-        let _ = CloseHandle(snap);
-    }
-    map
-}
-
-fn wide_to_string(w: &[u16]) -> String {
-    let len = w.iter().position(|&c| c == 0).unwrap_or(w.len());
-    String::from_utf16_lossy(&w[..len])
 }
 
 /// The port is in the low word of the DWORD in network byte order; `from_be` gives host order.

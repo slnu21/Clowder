@@ -1401,6 +1401,54 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Liveness couldn't identify an owning process, so this card never clears itself. Dotted, not loud —
+   it's an explanation, not an alarm. */
+.session-unknown {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border: 1px dotted var(--text-3);
+  border-radius: 50%;
+  color: var(--text-3);
+  font-size: 9px;
+  line-height: 11px;
+  text-align: center;
+  cursor: help;
+}
+
+/* The escape hatch for a verdict we got wrong. Hidden until hover so it doesn't clutter the rail —
+   except on a card that can't clear itself, where it's the only way out and must always be visible. */
+.session-dismiss {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.session:hover .session-dismiss,
+.session.owner-unknown .session-dismiss,
+.session-dismiss:focus-visible { opacity: 1; }
+.session-dismiss:hover { color: var(--text-1); background: color-mix(in srgb, var(--text-1) 10%, transparent); }
+
+.session-sweep {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--line-1);
+  border-radius: 7px;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.session-sweep:hover { color: var(--text-1); background: var(--bg-overlay); }
+
 .session-meta { margin: 4px 0 0 16px; color: var(--text-2); font-size: var(--fs-xs); }
 .session-tool,
 .session-ctx { margin-left: 3px; color: var(--text-3); }
