@@ -3,7 +3,9 @@ import Icon from "../../components/Icon";
 import { useT } from "../../lib/i18n";
 import type { Entry } from "../../lib/tauri";
 import SettingsPopover from "../settings/SettingsPopover";
+import { useSettings } from "../settings/store";
 import { viewerKindFor } from "../workspace/model";
+import { isFavorite, toggleFavorite } from "./favorites";
 import FolderNav from "./FolderNav";
 import { useExplorer } from "./store";
 import WorkspaceTree from "./WorkspaceTree";
@@ -27,6 +29,8 @@ export default function Explorer({
   const [tab, setTab] = useState<"explorer" | "workspace">("explorer");
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null);
   const request = useExplorer((s) => s.request);
+  const favorites = useSettings((s) => s.settings.favorites);
+  const update = useSettings((s) => s.update);
 
   // A folder revealed from elsewhere has to bring its tab with it — FolderNav is unmounted while
   // workspace is showing, so the request would land nowhere.
@@ -94,6 +98,21 @@ export default function Explorer({
               </button>
             );
           })()}
+          {/* One toggle, so the menu never needs to know where the row came from: a row in the
+              favourites section is by definition already a favourite, and reads "remove". Folders
+              only — a file favourite would just fail silently when clicked (`listDir` throws and
+              `navigate` swallows it). */}
+          <button
+            disabled={!menu.entry.isDir}
+            onClick={() => {
+              update({ favorites: toggleFavorite(favorites, menu.entry.path) });
+              setMenu(null);
+            }}
+          >
+            {isFavorite(favorites, menu.entry.path)
+              ? t("explorer.removeFavorite")
+              : t("explorer.addFavorite")}
+          </button>
         </div>
       )}
     </div>

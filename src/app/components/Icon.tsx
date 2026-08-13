@@ -31,7 +31,8 @@ export type IconName =
   | "k8s"
   | "docker"
   | "play"
-  | "bookmark";
+  | "bookmark"
+  | "star";
 
 const SHAPES: Record<IconName, React.ReactNode> = {
   folder: (
@@ -155,6 +156,11 @@ const SHAPES: Record<IconName, React.ReactNode> = {
   ),
   play: <polygon points="6 3 20 12 6 21 6 3" />,
   bookmark: <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />,
+  // Favourites. Distinct from `bookmark`, which the snippets panel already owns — two different
+  // things sharing a glyph would read as one feature. Filled state comes from CSS (`fill`).
+  star: (
+    <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+  ),
 };
 
 export default function Icon({
