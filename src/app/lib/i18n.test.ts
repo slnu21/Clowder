@@ -65,6 +65,7 @@ describe("catalogue integrity", () => {
     "titlebar.railToggle",
     "explorer.openTerminalHere",
     "explorer.addFavorite",
+    "explorer.openInFileExplorer",
     "workspace.colorSwatch",
     "workspace.resetTerminal",
     "workspace.resetTerminalHint",

@@ -101,6 +101,40 @@ fn is_hidden_attr(_e: &fs::DirEntry) -> bool {
     false
 }
 
+/// Open a folder in Windows File Explorer.
+///
+/// A command of our own rather than the opener plugin's `openPath`: that one needs
+/// `opener:allow-open-path` with a scope, and a scope wide enough for an explorer that roams the whole
+/// disk is a webview-wide licence to launch *any* file with whatever program claims its extension —
+/// the very thing `openTarget` refuses to do. This can only ever show a folder. (Files go through the
+/// already-granted `revealItemInDir`, which selects them in their parent.)
+///
+/// `(async)` because it spawns a process (ADR 0003). Spawned, not waited on: `explorer.exe` hands the
+/// window to the running shell and exits — with exit code 1 even on success, so there is nothing
+/// useful to wait for.
+#[tauri::command(async)]
+pub fn open_folder_in_explorer(path: String) -> Result<(), String> {
+    let dir = explorer_folder(&path)?;
+    // Absolute path to the system copy, so a stray `explorer.exe` on PATH can't stand in for it.
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    std::process::Command::new(Path::new(&root).join("explorer.exe"))
+        .arg(dir)
+        .spawn()
+        .map(drop)
+        .map_err(|e| format!("explorer: {e}"))
+}
+
+/// The folder `open_folder_in_explorer` may open: an existing directory, nothing else. `explorer.exe`
+/// given a file *runs* it (via its association), so a file must never reach it from here.
+fn explorer_folder(path: &str) -> Result<&Path, String> {
+    let p = Path::new(path);
+    if p.is_dir() {
+        Ok(p)
+    } else {
+        Err(format!("not a directory: {path}"))
+    }
+}
+
 /// Where the explorer opens: the configured start path if set, else the Workspace folder, else the
 /// user profile.
 #[tauri::command(async)]
@@ -112,4 +146,27 @@ pub fn default_root() -> Option<String> {
     let ws = Path::new(&home).join("Documents").join("Workspace");
     let pick = if ws.is_dir() { ws } else { Path::new(&home).to_path_buf() };
     Some(pick.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The guard is the whole safety story of `open_folder_in_explorer`: `explorer.exe <file>` opens the
+    /// file with its associated program, so anything but a directory has to stop here.
+    #[test]
+    fn explorer_folder_admits_only_directories() {
+        let dir = std::env::temp_dir().join("clowder-test-explorer-folder");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("run-me.cmd");
+        fs::write(&file, "echo hi").unwrap();
+
+        assert!(explorer_folder(dir.to_str().unwrap()).is_ok(), "a directory opens");
+        assert!(explorer_folder("C:\\").is_ok(), "a drive root opens");
+        assert!(explorer_folder(file.to_str().unwrap()).is_err(), "a file must never reach explorer.exe");
+        assert!(explorer_folder(dir.join("missing").to_str().unwrap()).is_err(), "a missing path is refused");
+        assert!(explorer_folder("").is_err(), "an empty path is refused");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

@@ -29,6 +29,9 @@ export const listDir = (path: string) => invoke<Entry[]>("list_dir", { path });
 /** Convenience starting point, not a workspace. */
 export const defaultRoot = () => invoke<string | null>("default_root");
 
+/** Show a folder in Windows File Explorer. Folders only — Rust refuses anything else. */
+export const openFolderInExplorer = (path: string) => invoke<void>("open_folder_in_explorer", { path });
+
 /** Read a file as text, normalizing newlines to LF (md/html viewers). */
 export async function readFile(path: string): Promise<string> {
   const s = await invoke<string>("read_file", { path });
