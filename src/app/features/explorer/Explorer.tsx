@@ -1,7 +1,8 @@
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import Icon from "../../components/Icon";
 import { useT } from "../../lib/i18n";
-import type { Entry } from "../../lib/tauri";
+import { openFolderInExplorer, type Entry } from "../../lib/tauri";
 import SettingsPopover from "../settings/SettingsPopover";
 import { useSettings } from "../settings/store";
 import { viewerKindFor } from "../workspace/model";
@@ -98,6 +99,16 @@ export default function Explorer({
               </button>
             );
           })()}
+          {/* Folders open as themselves; a file opens its parent with the file selected. */}
+          <button
+            onClick={() => {
+              const { path, isDir } = menu.entry;
+              void (isDir ? openFolderInExplorer(path) : revealItemInDir(path));
+              setMenu(null);
+            }}
+          >
+            {t("explorer.openInFileExplorer")}
+          </button>
           {/* One toggle, so the menu never needs to know where the row came from: a row in the
               favourites section is by definition already a favourite, and reads "remove". Folders
               only — a file favourite would just fail silently when clicked (`listDir` throws and

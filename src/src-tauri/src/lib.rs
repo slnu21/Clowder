@@ -92,6 +92,7 @@ pub fn run() {
             fs_ops::list_drives,
             fs_ops::list_dir,
             fs_ops::default_root,
+            fs_ops::open_folder_in_explorer,
             fs_ops::read_file,
             fs_ops::read_file_base64,
             link::resolve_link_target,
