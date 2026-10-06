@@ -7,6 +7,7 @@ import { osc52ToText } from "../../lib/osc52";
 import { osc7ToPath } from "../../lib/osc7";
 import { ptyClose, ptyResize, ptySpawn, ptyWrite, resolveLinkTarget } from "../../lib/tauri";
 import { resolveShell } from "../../lib/settings";
+import { AFTER_FULL_RESET, isStranded, recoverySequence, REDRAW_PROMPT } from "../../lib/tuiRecovery";
 import { useSettings } from "../settings/store";
 
 /**
@@ -273,6 +274,24 @@ const URL_RE = /\b(?:https?:\/\/|mailto:)[^\s<>"'`]+/g;
  */
 const PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|\/)?(?:[\w.~%$@+-]+[\\/])+[\w.~%$@+-]+(?::\d+){0,2}/g;
 
+/**
+ * At a shell prompt, put down any TUI-only mode still up — the program that raised it was killed before
+ * it could (pure decision in `tuiRecovery.ts`). Written into xterm, never the PTY: it is the terminal's
+ * own state that is wrong, the shell is fine.
+ *
+ * The write is queued behind the chunk being parsed, so a prompt drawn on the alternate screen leaves
+ * with it — in that case ask the shell to draw it again, once the switch has actually happened.
+ */
+function recoverStrandedModes(entry: PoolEntry): void {
+  const { term } = entry;
+  const modes = { mouseTrackingMode: term.modes.mouseTrackingMode, bufferType: term.buffer.active.type };
+  if (!isStranded(modes)) return;
+  const { seq, leftAltScreen } = recoverySequence(modes);
+  term.write(seq, () => {
+    if (leftAltScreen && !entry.released && entry.ptyId != null) void ptyWrite(entry.ptyId, REDRAW_PROMPT);
+  });
+}
+
 export function acquire(
   leafId: string,
   cwd?: string,
@@ -302,6 +321,9 @@ export function acquire(
   registerLinks(term, () => liveCwd);
   registerClipboardOsc(term);
   term.parser.registerOscHandler(7, (data) => {
+    // OSC 7 comes right before the shell's prompt, so it doubles as "no TUI is in the foreground any
+    // more" — the moment to undo whatever a killed one left switched on (see tuiRecovery.ts).
+    recoverStrandedModes(entry);
     const next = osc7ToPath(data);
     if (next && next !== liveCwd) {
       liveCwd = next;
@@ -499,6 +521,23 @@ export async function copyView(leafId: string): Promise<void> {
 /** Select everything in the pane's buffer (leaves it highlighted so the user can copy or narrow it). */
 export function selectAllPane(leafId: string): void {
   pool.get(leafId)?.term.selectAll();
+}
+
+/**
+ * The manual escape hatch: a full terminal reset (RIS) for when the automatic recovery can't see the
+ * prompt — cmd, an ssh session, a shell whose rc replaced `PROMPT_COMMAND`, or a TUI that is hung rather
+ * than dead. Clears the screen and every mode, re-asserts ConPTY's focus reporting (RIS drops it and
+ * ConPTY never asks twice), then sends Ctrl+L so a shell redraws its prompt — a live TUI reads the same
+ * key as "redraw".
+ */
+export function resetPane(leafId: string): void {
+  const entry = pool.get(leafId);
+  if (!entry) return;
+  entry.term.reset();
+  entry.term.write(AFTER_FULL_RESET, () => {
+    if (!entry.released && entry.ptyId != null) void ptyWrite(entry.ptyId, REDRAW_PROMPT);
+  });
+  entry.term.focus();
 }
 
 /** Paste the clipboard into the pane (bracketed-paste aware — see `clipboardKeys`). */

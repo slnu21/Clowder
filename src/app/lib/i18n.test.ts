@@ -66,6 +66,8 @@ describe("catalogue integrity", () => {
     "explorer.openTerminalHere",
     "explorer.addFavorite",
     "workspace.colorSwatch",
+    "workspace.resetTerminal",
+    "workspace.resetTerminalHint",
     "welcome.hint",
     "sessions.statusAwaitingPermission",
     "sessions.meterCtx",
