@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isStranded, recoverySequence, type TermModes } from "./tuiRecovery";
+import { clearLineKeys, isStranded, recoverySequence, type TermModes } from "./tuiRecovery";
 
 const clean: TermModes = { mouseTrackingMode: "none", bufferType: "normal" };
 
@@ -46,5 +46,22 @@ describe("recoverySequence", () => {
     const { seq } = recoverySequence({ mouseTrackingMode: "any", bufferType: "alternate" });
     expect(seq).not.toContain("1004");
     expect(seq).not.toContain("2004");
+  });
+});
+
+describe("clearLineKeys", () => {
+  it("uses readline's keys for Git Bash", () => {
+    expect(clearLineKeys("C:\\Program Files\\Git\\bin\\bash.exe")).toBe("\x05\x15");
+  });
+
+  it("uses PSReadLine's keys for both PowerShells — readline's do nothing there", () => {
+    for (const ps of ["powershell.exe", "C:\\Program Files\\PowerShell\\7\\pwsh.exe", "PowerShell.EXE"]) {
+      expect(clearLineKeys(ps)).toBe("\x1b[F\x1b[1;5H");
+    }
+  });
+
+  it("sends nothing to a shell it doesn't know, or before the shell is known", () => {
+    expect(clearLineKeys("cmd.exe")).toBe("");
+    expect(clearLineKeys(null)).toBe("");
   });
 });

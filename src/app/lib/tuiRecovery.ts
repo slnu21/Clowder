@@ -64,6 +64,27 @@ export function recoverySequence(m: TermModes): { seq: string; leftAltScreen: bo
 export const REDRAW_PROMPT = "\x0c";
 
 /**
+ * Keys that empty the shell's input line, wherever the cursor is in it — sent by the manual reset
+ * before `REDRAW_PROMPT`.
+ *
+ * Clearing the screen is not enough: what a stranded mouse typed (`35;10;5M…`) lives in the **line
+ * editor's buffer**, not on the screen, and Ctrl+L redraws the prompt *with* that buffer. Each line
+ * editor needs its own keys, and neither shell understands the other's (measured through ConPTY with
+ * the cursor mid-line — see the 2026-10-06 devlog):
+ * - readline: Ctrl+E (end of line), Ctrl+U (kill to start).
+ * - PSReadLine, Windows mode: End, then Ctrl+Home (`BackwardDeleteInput`). Ctrl+E/Ctrl+U do nothing.
+ *
+ * Unknown shells (cmd) get nothing rather than a guess: a key a line editor doesn't know may be
+ * inserted as text, which is the problem being fixed.
+ */
+export function clearLineKeys(shell: string | null): string {
+  const s = (shell ?? "").toLowerCase();
+  if (s.endsWith("bash.exe")) return "\x05\x15";
+  if (s.endsWith("powershell.exe") || s.endsWith("pwsh.exe")) return "\x1b[F\x1b[1;5H";
+  return "";
+}
+
+/**
  * Re-asserted after a manual full reset (`term.reset()` is RIS and clears **every** mode). Focus reporting
  * belongs to ConPTY, which asked for it once at startup and will not ask again — see the note above.
  */

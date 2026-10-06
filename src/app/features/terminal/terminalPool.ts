@@ -7,7 +7,13 @@ import { osc52ToText } from "../../lib/osc52";
 import { osc7ToPath } from "../../lib/osc7";
 import { ptyClose, ptyResize, ptySpawn, ptyWrite, resolveLinkTarget } from "../../lib/tauri";
 import { resolveShell } from "../../lib/settings";
-import { AFTER_FULL_RESET, isStranded, recoverySequence, REDRAW_PROMPT } from "../../lib/tuiRecovery";
+import {
+  AFTER_FULL_RESET,
+  clearLineKeys,
+  isStranded,
+  recoverySequence,
+  REDRAW_PROMPT,
+} from "../../lib/tuiRecovery";
 import { useSettings } from "../settings/store";
 
 /**
@@ -33,6 +39,8 @@ export type PoolEntry = {
   /** The persistent host element; moved between slots, never re-created. */
   el: HTMLDivElement;
   ptyId: number | null;
+  /** The shell's executable path once resolved — the manual reset picks its line-editor keys by it. */
+  shell: string | null;
   released: boolean;
 };
 
@@ -353,11 +361,12 @@ export function acquire(
     true,
   );
 
-  const entry: PoolEntry = { term, fit, el, ptyId: null, released: false };
+  const entry: PoolEntry = { term, fit, el, ptyId: null, shell: null, released: false };
   pool.set(leafId, entry);
 
   void (async () => {
     const shell = await resolveShell();
+    entry.shell = shell;
     if (entry.released) return;
     // A one-shot: run the leaf's start command once the shell's first output (its prompt) lands, so the
     // line editor is ready and the command isn't swallowed. Keystroke injection **deliberately** — it
@@ -527,15 +536,19 @@ export function selectAllPane(leafId: string): void {
  * The manual escape hatch: a full terminal reset (RIS) for when the automatic recovery can't see the
  * prompt — cmd, an ssh session, a shell whose rc replaced `PROMPT_COMMAND`, or a TUI that is hung rather
  * than dead. Clears the screen and every mode, re-asserts ConPTY's focus reporting (RIS drops it and
- * ConPTY never asks twice), then sends Ctrl+L so a shell redraws its prompt — a live TUI reads the same
- * key as "redraw".
+ * ConPTY never asks twice), then empties the shell's input line and sends Ctrl+L so it redraws a clean
+ * prompt. The line has to go too: garbage a stranded mouse typed sits in the line editor, not on the
+ * screen, and Ctrl+L alone redraws it right back (reported on the first try). A live TUI reads Ctrl+L
+ * as "redraw"; under bash the line keys also empty a TUI's own input box, which is what a reset means.
  */
 export function resetPane(leafId: string): void {
   const entry = pool.get(leafId);
   if (!entry) return;
   entry.term.reset();
   entry.term.write(AFTER_FULL_RESET, () => {
-    if (!entry.released && entry.ptyId != null) void ptyWrite(entry.ptyId, REDRAW_PROMPT);
+    if (!entry.released && entry.ptyId != null) {
+      void ptyWrite(entry.ptyId, clearLineKeys(entry.shell) + REDRAW_PROMPT);
+    }
   });
   entry.term.focus();
 }
