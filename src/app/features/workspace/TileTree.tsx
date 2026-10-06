@@ -10,6 +10,7 @@ import {
   copyView,
   paneHasSelection,
   pasteInto,
+  resetPane,
   selectAllPane,
   writeToPane,
 } from "../terminal/terminalPool";
@@ -279,6 +280,9 @@ function TerminalMenu({
       <button onClick={() => { void copyView(leafId); onClose(); }}>{t("workspace.copyView")}</button>
       <button onClick={() => { void pasteInto(leafId); onClose(); }}>{t("workspace.paste")}</button>
       <button onClick={() => { selectAllPane(leafId); onClose(); }}>{t("workspace.selectAll")}</button>
+      <button onClick={() => { resetPane(leafId); onClose(); }} title={t("workspace.resetTerminalHint")}>
+        {t("workspace.resetTerminal")}
+      </button>
       <div className="ctx-hint">{t("workspace.selectionHint")}</div>
     </div>,
     document.body,

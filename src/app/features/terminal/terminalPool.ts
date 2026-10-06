@@ -7,6 +7,13 @@ import { osc52ToText } from "../../lib/osc52";
 import { osc7ToPath } from "../../lib/osc7";
 import { ptyClose, ptyResize, ptySpawn, ptyWrite, resolveLinkTarget } from "../../lib/tauri";
 import { resolveShell } from "../../lib/settings";
+import {
+  AFTER_FULL_RESET,
+  clearLineKeys,
+  isStranded,
+  recoverySequence,
+  REDRAW_PROMPT,
+} from "../../lib/tuiRecovery";
 import { useSettings } from "../settings/store";
 
 /**
@@ -32,6 +39,8 @@ export type PoolEntry = {
   /** The persistent host element; moved between slots, never re-created. */
   el: HTMLDivElement;
   ptyId: number | null;
+  /** The shell's executable path once resolved — the manual reset picks its line-editor keys by it. */
+  shell: string | null;
   released: boolean;
 };
 
@@ -273,6 +282,24 @@ const URL_RE = /\b(?:https?:\/\/|mailto:)[^\s<>"'`]+/g;
  */
 const PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|\/)?(?:[\w.~%$@+-]+[\\/])+[\w.~%$@+-]+(?::\d+){0,2}/g;
 
+/**
+ * At a shell prompt, put down any TUI-only mode still up — the program that raised it was killed before
+ * it could (pure decision in `tuiRecovery.ts`). Written into xterm, never the PTY: it is the terminal's
+ * own state that is wrong, the shell is fine.
+ *
+ * The write is queued behind the chunk being parsed, so a prompt drawn on the alternate screen leaves
+ * with it — in that case ask the shell to draw it again, once the switch has actually happened.
+ */
+function recoverStrandedModes(entry: PoolEntry): void {
+  const { term } = entry;
+  const modes = { mouseTrackingMode: term.modes.mouseTrackingMode, bufferType: term.buffer.active.type };
+  if (!isStranded(modes)) return;
+  const { seq, leftAltScreen } = recoverySequence(modes);
+  term.write(seq, () => {
+    if (leftAltScreen && !entry.released && entry.ptyId != null) void ptyWrite(entry.ptyId, REDRAW_PROMPT);
+  });
+}
+
 export function acquire(
   leafId: string,
   cwd?: string,
@@ -302,6 +329,9 @@ export function acquire(
   registerLinks(term, () => liveCwd);
   registerClipboardOsc(term);
   term.parser.registerOscHandler(7, (data) => {
+    // OSC 7 comes right before the shell's prompt, so it doubles as "no TUI is in the foreground any
+    // more" — the moment to undo whatever a killed one left switched on (see tuiRecovery.ts).
+    recoverStrandedModes(entry);
     const next = osc7ToPath(data);
     if (next && next !== liveCwd) {
       liveCwd = next;
@@ -331,11 +361,12 @@ export function acquire(
     true,
   );
 
-  const entry: PoolEntry = { term, fit, el, ptyId: null, released: false };
+  const entry: PoolEntry = { term, fit, el, ptyId: null, shell: null, released: false };
   pool.set(leafId, entry);
 
   void (async () => {
     const shell = await resolveShell();
+    entry.shell = shell;
     if (entry.released) return;
     // A one-shot: run the leaf's start command once the shell's first output (its prompt) lands, so the
     // line editor is ready and the command isn't swallowed. Keystroke injection **deliberately** — it
@@ -499,6 +530,27 @@ export async function copyView(leafId: string): Promise<void> {
 /** Select everything in the pane's buffer (leaves it highlighted so the user can copy or narrow it). */
 export function selectAllPane(leafId: string): void {
   pool.get(leafId)?.term.selectAll();
+}
+
+/**
+ * The manual escape hatch: a full terminal reset (RIS) for when the automatic recovery can't see the
+ * prompt — cmd, an ssh session, a shell whose rc replaced `PROMPT_COMMAND`, or a TUI that is hung rather
+ * than dead. Clears the screen and every mode, re-asserts ConPTY's focus reporting (RIS drops it and
+ * ConPTY never asks twice), then empties the shell's input line and sends Ctrl+L so it redraws a clean
+ * prompt. The line has to go too: garbage a stranded mouse typed sits in the line editor, not on the
+ * screen, and Ctrl+L alone redraws it right back (reported on the first try). A live TUI reads Ctrl+L
+ * as "redraw"; under bash the line keys also empty a TUI's own input box, which is what a reset means.
+ */
+export function resetPane(leafId: string): void {
+  const entry = pool.get(leafId);
+  if (!entry) return;
+  entry.term.reset();
+  entry.term.write(AFTER_FULL_RESET, () => {
+    if (!entry.released && entry.ptyId != null) {
+      void ptyWrite(entry.ptyId, clearLineKeys(entry.shell) + REDRAW_PROMPT);
+    }
+  });
+  entry.term.focus();
 }
 
 /** Paste the clipboard into the pane (bracketed-paste aware — see `clipboardKeys`). */
