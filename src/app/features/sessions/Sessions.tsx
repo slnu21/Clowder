@@ -1,17 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import Icon from "../../components/Icon";
 import { useT, type MsgKey } from "../../lib/i18n";
 import { beaconInstall, beaconStatus, beaconUninstall } from "../../lib/beacon";
 import type { BeaconStatus, StatuslineMode } from "../../lib/beacon";
+import { ago, resumeCommand } from "../../lib/resume";
 import { useFocusRefresh } from "../../lib/useFocusRefresh";
 import { leafIdForPty } from "../terminal/terminalPool";
 import { useWorkspace } from "../workspace/store";
 import {
   onSessionsUpdate,
+  recentSessions,
   sessionDismiss,
   sessionsDismissDead,
   sessionsSnapshot,
+  type RecentSession,
   type SessionsSnapshot,
   type SessionView,
 } from "../../lib/sessions";
@@ -103,6 +106,9 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
 
   const sessions = snap?.sessions ?? [];
   const waiting = snap?.waitingCount ?? 0;
+  // Every id on the board, live or ended — the recent list leaves those out (an ended card carries its
+  // own resume button), and a change in this set is also the moment the list may have changed.
+  const boardIds = useMemo(() => sessions.map((s) => s.sessionId).sort().join(","), [sessions]);
 
   // The narrow rail is a glance, not a panel: status colour, a vertical name, and the budgets. Install
   // prompts and prose belong to the full rail — there is no room to say anything honestly in 40px.
@@ -170,6 +176,8 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
         ) : (
           sessions.map((s) => <SessionRow key={s.sessionId} s={s} now={now} />)
         )}
+        {/* Independent of tracking: this reads Claude Code's own history, so it works with the beacon off. */}
+        {!asking && <RecentSessions boardIds={boardIds} now={now} />}
       </div>
 
       {snap && <UsageFooter usage={snap.usage} />}
@@ -219,6 +227,10 @@ export default function Sessions({ variant = "full" }: { variant?: "full" | "min
 function SessionRow({ s, now }: { s: SessionView; now: number }) {
   const t = useT();
   const focusLeaf = useWorkspace((w) => w.focusLeaf);
+  const openCommandTab = useWorkspace((w) => w.openCommandTab);
+  // Only an ended session can be resumed from its card — resuming a live one would put two processes
+  // on one transcript. `ended` here is the liveness verdict, i.e. the process was proven gone.
+  const resume = s.status === "dead" && s.cwd ? resumeCommand("claude", s.sessionId) : null;
   // A correlated session (paneId set) still resolves to a live tile only if that pane is still open.
   const linkedLeaf = s.paneId != null ? leafIdForPty(s.paneId) : undefined;
 
@@ -232,7 +244,14 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
     >
       <div className="session-head">
         <span className={"badge " + s.status} />
-        <span className="session-project">{s.project}</span>
+        {/* The name leads when there is one; the folder moves to the meta line. Without a name the folder
+            is the only label, as before. */}
+        <span
+          className={"session-project" + (s.title && s.titleSource === "prompt" ? " from-prompt" : "")}
+          title={s.title ?? s.cwd ?? undefined}
+        >
+          {s.title ?? s.project}
+        </span>
         {linkedLeaf && (
           <span className="session-link" title={t("sessions.runningHere")}>
             <Icon name="session-link" size={13} />
@@ -259,12 +278,24 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
         </button>
       </div>
       <div className="session-meta">
+        {s.title && <span className="session-folder">{s.project} · </span>}
         <span className="session-status">{STATUS_KEY[s.status] ? t(STATUS_KEY[s.status]) : s.status}</span>
         {s.toolName && <span className="session-tool">· {s.toolName}</span>}
         {s.ctxPercent != null && (
           <span className="session-ctx" title={s.ctxTokens ?? undefined}>
             · ctx {Math.round(s.ctxPercent)}%
           </span>
+        )}
+        {resume && (
+          <button
+            className="session-resume"
+            title={t("sessions.resumeTitle", { cmd: resume })}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => openCommandTab(resume, s.title ?? s.project, s.cwd!)}
+          >
+            <Icon name="play" size={11} />
+            {t("sessions.resume")}
+          </button>
         )}
       </div>
       {s.subagents.length > 0 && (
@@ -282,12 +313,78 @@ function SessionRow({ s, now }: { s: SessionView; now: number }) {
   );
 }
 
+/** Rows shown before "show more" — the rail is narrow and live cards come first. */
+const RECENT_COLLAPSED = 5;
+
+/**
+ * Sessions Claude Code still has on disk, newest first, minus the ones already on the board. One click
+ * reopens a session where it left off: a new tab in its folder running `claude -r <id>`. The point is
+ * recovery — a session killed from outside (crash, a security tool, the app itself going down) is at the
+ * top of this list. **Renders nothing when there's nothing to offer**, so someone who doesn't use Claude
+ * Code never sees it.
+ */
+function RecentSessions({ boardIds, now }: { boardIds: string; now: number }) {
+  const t = useT();
+  const openCommandTab = useWorkspace((w) => w.openCommandTab);
+  const [rows, setRows] = useState<RecentSession[]>([]);
+  const [expanded, setExpanded] = useState(false);
+
+  const refresh = () =>
+    recentSessions()
+      .then(setRows)
+      .catch(() => {}); // fail-soft: keep the last list
+  // On mount, and whenever the board's membership changes — a card leaving the board is exactly when
+  // its session should show up here.
+  useEffect(() => {
+    refresh();
+  }, [boardIds]);
+  useFocusRefresh(refresh);
+
+  const onBoard = useMemo(() => new Set(boardIds.split(",")), [boardIds]);
+  const list = rows.filter((r) => !onBoard.has(r.sessionId));
+  if (list.length === 0) return null;
+  const shown = expanded ? list : list.slice(0, RECENT_COLLAPSED);
+
+  return (
+    <div className="recent">
+      <div className="recent-head">{t("recent.header")}</div>
+      {shown.map((r) => {
+        const cmd = r.cwdExists ? resumeCommand(r.agent, r.sessionId) : null;
+        const when = ago(r.lastActive, now);
+        return (
+          <button
+            key={r.sessionId}
+            className={"recent-row" + (r.titleSource === "prompt" ? " from-prompt" : "")}
+            disabled={!cmd}
+            title={cmd ? `${t("recent.resumeTitle", { cwd: r.cwd })}
+${cmd}` : t("recent.folderMissing", { cwd: r.cwd })}
+            onClick={() => cmd && openCommandTab(cmd, r.title, r.cwd)}
+          >
+            <span className="recent-title">{r.title}</span>
+            <span className="recent-meta">
+              {r.project}
+              {r.gitBranch && <span className="recent-branch"> · {r.gitBranch}</span>}
+              <span className="recent-when">{t(when.key, when.n != null ? { n: when.n } : undefined)}</span>
+            </span>
+          </button>
+        );
+      })}
+      {list.length > RECENT_COLLAPSED && (
+        <button className="recent-more" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? t("recent.less") : t("recent.more", { n: list.length - RECENT_COLLAPSED })}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** One session as a vertical chip: status stripe + name written top-to-bottom. */
 function MiniSession({ s }: { s: SessionView }) {
   const t = useT();
   const focusLeaf = useWorkspace((w) => w.focusLeaf);
   const linkedLeaf = s.paneId != null ? leafIdForPty(s.paneId) : undefined;
   const label = [
+    s.title,
     s.project,
     STATUS_KEY[s.status] ? t(STATUS_KEY[s.status]) : s.status,
     s.ctxPercent != null ? `ctx ${Math.round(s.ctxPercent)}%` : null,

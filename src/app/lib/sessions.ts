@@ -1,6 +1,9 @@
 import { invoke } from "./invoke";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+/** Where a session's name came from — the user (`custom`), Claude (`ai`), or the last prompt. */
+export type TitleSource = "custom" | "ai" | "prompt";
+
 /** Mirrors the Rust `sessions::*View` snapshot (camelCase). */
 export type SubagentView = {
   agentId: string;
@@ -17,6 +20,9 @@ export type SessionView = {
   statusSince?: string | null;
   cwd?: string | null;
   project: string;
+  /** The session's name: `/rename`, else Claude's generated title, else the last prompt. */
+  title?: string | null;
+  titleSource?: TitleSource | null;
   message?: string | null;
   toolName?: string | null;
   ctxPercent?: number | null;
@@ -56,3 +62,22 @@ export const sessionDismiss = (id: string) => invoke<void>("session_dismiss", { 
 
 /** Clear every card currently marked ended. Resolves to how many were cleared. */
 export const sessionsDismissDead = () => invoke<number>("sessions_dismiss_dead");
+
+/** Mirrors Rust `transcripts::RecentSession` — one resumable session from Claude Code's own history. */
+export type RecentSession = {
+  sessionId: string;
+  /** Which agent wrote it, and so which command resumes it (see `lib/resume.ts`). */
+  agent: string;
+  title: string;
+  titleSource: TitleSource;
+  cwd: string;
+  project: string;
+  /** False when the folder is gone — the row is shown but can't be resumed. */
+  cwdExists: boolean;
+  gitBranch?: string | null;
+  /** Unix ms of the last write to the transcript. */
+  lastActive: number;
+};
+
+/** Newest resumable sessions, read from `~/.claude/projects`. Empty when Claude Code isn't used. */
+export const recentSessions = () => invoke<RecentSession[]>("recent_sessions");

@@ -17,6 +17,7 @@ pub mod settings;
 pub mod snippets;
 pub mod spool;
 pub mod ssh;
+pub mod transcripts;
 pub mod tasks;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -100,6 +101,7 @@ pub fn run() {
             sessions::sessions_snapshot,
             sessions::session_dismiss,
             sessions::sessions_dismiss_dead,
+            transcripts::recent_sessions,
             settings::get_settings,
             settings::save_settings,
             settings::resolve_shell_cmd,
