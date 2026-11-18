@@ -15,6 +15,7 @@ use crate::correlate;
 use crate::liveness::{owner_state, Owner};
 use crate::pty::PtyState;
 use crate::spool::{self, SessionRecord};
+use crate::transcripts::{self, TitleSource};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -32,6 +33,10 @@ const DEAD_GRACE: Duration = Duration::from_secs(15);
 /// honest outcome is the card coming back, because Vigil's rail still shows that session and
 /// pretending otherwise would be a lie. Ten seconds covers a transient lock and several poll cycles.
 const DISMISS_TOMBSTONE: Duration = Duration::from_secs(10);
+/// How often a card's name is re-read from its transcript. The file changes on every turn of a
+/// working session; the title (Claude's generated one, or a `/rename`) changes rarely. The read itself is
+/// cached on (mtime, length), so this bounds a busy session to one head+tail read per interval.
+const TITLE_EVERY: Duration = Duration::from_secs(10);
 
 pub const EVENT: &str = "sessions:update";
 
@@ -57,6 +62,10 @@ pub struct SessionView {
     pub status_since: Option<String>,
     pub cwd: Option<String>,
     pub project: String,
+    /// The session's name — `/rename`, else Claude's generated title, else the last prompt. `None`
+    /// until the transcript has one; the card then falls back to the folder name alone.
+    pub title: Option<String>,
+    pub title_source: Option<TitleSource>,
     pub message: Option<String>,
     pub tool_name: Option<String>,
     pub ctx_percent: Option<f64>,
@@ -108,9 +117,45 @@ struct Session {
     ctx_tokens: Option<String>,
     /// Correlated pane, cached on first match — kept even after claude exits (can't re-walk a dead pid).
     pane_id: Option<u64>,
+    title: Option<(String, TitleSource)>,
+    title_at: Option<Instant>,
 }
 
 impl Session {
+    /// Take one spool record into a session that may already be latched dead.
+    ///
+    /// Dead is terminal **for that owner**: a stale record from the process we watched die must never
+    /// bring the card back. But `claude -r` resumes **under the same session id** with a new process,
+    /// and its first hook rewrites this very spool file. Treating that as stale was a real bug the
+    /// resume button would have hit every time: the card stayed 종료됨, and after `DEAD_GRACE` the reap
+    /// deleted the *live* session's spool — the card vanished until its next hook. A different owner
+    /// is a new life, so it clears the latch and the pane binding (the resumed process may run in
+    /// another pane; correlation re-walks it).
+    fn fold(&mut self, r: &SessionRecord) {
+        if self.dead {
+            if !self.is_new_owner(r) {
+                return;
+            }
+            self.dead = false;
+            self.dead_since = None;
+            self.pane_id = None;
+        }
+        self.apply(r);
+    }
+
+    /// Does this record come from a process other than the one we remember?
+    ///
+    /// A different pid is a different process. The same pid is a new process only when **both** birth
+    /// instants are known and differ (pid reuse by a new claude); a missing instant proves nothing, and
+    /// reviving on "don't know" would undo a death we did prove.
+    fn is_new_owner(&self, r: &SessionRecord) -> bool {
+        let Some(pid) = r.claude_pid.filter(|p| *p > 0) else { return false };
+        if self.claude_pid != Some(pid) {
+            return true;
+        }
+        matches!((&r.claude_started_at, &self.claude_started_at), (Some(a), Some(b)) if a != b)
+    }
+
     /// Fold one spool record in.
     ///
     /// Whether a field may be overwritten with `None` depends on what its absence *means*. For an
@@ -255,7 +300,7 @@ fn assemble(
 
     inner.dismissed.retain(|_, t| t.elapsed() < DISMISS_TOMBSTONE);
 
-    // Merge spool records into the live model (Dead sessions are terminal — skip their apply).
+    // Merge spool records into the live model (a dead session takes only a record from a new owner).
     let mut seen = std::collections::HashSet::new();
     for r in &records {
         let Some(id) = r.session_id.clone() else { continue };
@@ -266,10 +311,7 @@ fn assemble(
             continue;
         }
         seen.insert(id.clone());
-        let s = inner.sessions.entry(id).or_default();
-        if !s.dead {
-            s.apply(r);
-        }
+        inner.sessions.entry(id).or_default().fold(r);
     }
 
     // **One process snapshot per tick, at most** — correlation and the liveness sweep both need the
@@ -353,6 +395,20 @@ fn assemble(
         }
     }
 
+    // Card names, from each session's transcript — throttled (see `TITLE_EVERY`).
+    for s in inner.sessions.values_mut() {
+        if s.title_at.is_some_and(|t| t.elapsed() < TITLE_EVERY) {
+            continue;
+        }
+        if let Some(path) = s.transcript_path.as_deref() {
+            s.title_at = Some(Instant::now());
+            // Keep the last good name if this read fails — a locked file is not a rename.
+            if let Some(t) = transcripts::title_for(path) {
+                s.title = Some(t);
+            }
+        }
+    }
+
     // Subagents grouped by session.
     let mut subs: HashMap<String, Vec<SubagentView>> = HashMap::new();
     let mut seen_agents = std::collections::HashSet::new();
@@ -389,6 +445,8 @@ fn assemble(
                 status_since: s.status_since.clone(),
                 cwd: s.cwd.clone(),
                 project: project_name(s.cwd.as_deref()),
+                title: s.title.as_ref().map(|(t, _)| t.clone()),
+                title_source: s.title.as_ref().map(|(_, src)| *src),
                 message: s.message.clone(),
                 tool_name: s.tool_name.clone(),
                 ctx_percent: s.ctx_percent,
@@ -581,7 +639,7 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-fn project_name(cwd: Option<&str>) -> String {
+pub(crate) fn project_name(cwd: Option<&str>) -> String {
     match cwd {
         Some(c) if !c.is_empty() => {
             let trimmed = c.trim_end_matches(['\\', '/']);
@@ -705,6 +763,59 @@ mod tests {
             ..Default::default()
         });
         assert_eq!((s.claude_pid, s.claude_started_at.as_deref()), (Some(2), Some("200")));
+    }
+
+    fn owned(pid: i32, started: Option<&str>) -> SessionRecord {
+        SessionRecord {
+            status: Some("idle".into()),
+            claude_pid: Some(pid),
+            claude_started_at: started.map(Into::into),
+            ..Default::default()
+        }
+    }
+
+    fn dead_session(pid: i32, started: &str) -> Session {
+        let mut s = Session::default();
+        s.fold(&owned(pid, Some(started)));
+        s.pane_id = Some(7);
+        s.dead = true;
+        s.dead_since = Some(Instant::now());
+        s
+    }
+
+    /// `claude -r` brings a dead session back under the same id with a new process. Its record must
+    /// clear the latch — otherwise the grace-period reap deletes the resumed session's live spool.
+    #[test]
+    fn a_resumed_session_comes_back_to_life() {
+        let mut s = dead_session(100, "1000");
+        s.fold(&SessionRecord { status: Some("working".into()), ..owned(200, Some("2000")) });
+        assert!(!s.dead, "a new owner must clear the dead latch");
+        assert_eq!(s.dead_since, None);
+        assert_eq!(s.status, "working");
+        assert_eq!(s.claude_pid, Some(200));
+        assert_eq!(s.pane_id, None, "the resumed process may live in another pane — re-correlate");
+    }
+
+    /// The other direction: what the latch exists for. The dead process's own leftover record, or one
+    /// that can't name its owner, must not resurrect the card.
+    #[test]
+    fn a_stale_record_does_not_resurrect() {
+        for r in [
+            owned(100, Some("1000")),                                // the same process
+            owned(100, None),                                        // same pid, birth unknown
+            SessionRecord { claude_pid: None, ..owned(0, None) },    // no owner at all
+            SessionRecord { claude_pid: Some(0), ..owned(0, None) }, // the "unknown" sentinel
+        ] {
+            let mut s = dead_session(100, "1000");
+            s.fold(&SessionRecord { status: Some("working".into()), ..r });
+            assert!(s.dead, "a record that isn't provably new must leave the session dead");
+            assert_eq!(s.status, "idle", "and must not be applied");
+            assert_eq!(s.pane_id, Some(7));
+        }
+        // Same pid but a different birth instant is a new process (pid reuse by a new claude).
+        let mut s = dead_session(100, "1000");
+        s.fold(&owned(100, Some("3000")));
+        assert!(!s.dead);
     }
 
     /// The age floor is not decoration: `--statusline` writes usage before the first hook writes the

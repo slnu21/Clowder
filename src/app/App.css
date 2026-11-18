@@ -1399,6 +1399,9 @@ button {
 .session.working { border-left-color: var(--st-working); }
 .session.idle { border-left-color: var(--st-idle); }
 .session.dead { border-left-color: var(--st-dead); opacity: 0.55; }
+/* An ended card now carries a resume button — dimmed at rest, fully legible once you reach for it. */
+.session.dead:hover,
+.session.dead:focus-within { opacity: 1; }
 
 /* Hover cue is a background lift, not a border swap — keep the status stripe visible on hover. */
 .session.linked { cursor: pointer; transition: background-color 0.12s ease; }
@@ -1491,6 +1494,62 @@ button {
 .session-meta { margin: 4px 0 0 16px; color: var(--text-2); font-size: var(--fs-xs); }
 .session-tool,
 .session-ctx { margin-left: 3px; color: var(--text-3); }
+.session-folder { color: var(--text-3); }
+/* No title yet, so the label is the last thing typed — quieter than a real name. */
+.session-project.from-prompt { color: var(--text-2); font-weight: 400; }
+
+.session-resume {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 6px;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  vertical-align: middle;
+  cursor: pointer;
+}
+.session-resume:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* Recent sessions: Claude Code's own history, below the live board. Rows, not cards — these are
+   things you might open, not things happening. */
+.recent { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line-1); display: flex; flex-direction: column; gap: 1px; }
+.recent-head { padding: 0 6px 4px; color: var(--text-3); font-size: var(--fs-xs); }
+.recent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+}
+.recent-row:hover:not(:disabled) { background: var(--bg-overlay); }
+.recent-row:disabled { opacity: 0.45; cursor: not-allowed; }
+.recent-title { overflow: hidden; font-size: var(--fs-sm); white-space: nowrap; text-overflow: ellipsis; }
+.recent-row.from-prompt .recent-title { color: var(--text-2); }
+.recent-meta { display: flex; min-width: 0; color: var(--text-3); font-size: var(--fs-xs); white-space: nowrap; }
+.recent-branch { overflow: hidden; text-overflow: ellipsis; }
+.recent-when { flex: none; margin-left: auto; padding-left: 8px; font-variant-numeric: tabular-nums; }
+.recent-more {
+  margin: 2px 0 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.recent-more:hover { color: var(--text-1); }
 
 .subagents { margin: 6px 0 0 16px; }
 
